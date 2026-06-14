@@ -1,0 +1,6 @@
+{
+  "name": "Orbit AI",
+  "description": "An AI workspace with a polished Android front end and a backend workflow designed for local tooling through Termux plus external AI providers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
