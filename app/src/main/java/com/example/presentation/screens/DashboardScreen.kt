@@ -32,6 +32,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory)
 ) {
     val projects by viewModel.projects.collectAsState()
+    val sessions by viewModel.sessions.collectAsState()
 
     Scaffold(
         topBar = {
@@ -65,14 +66,14 @@ fun DashboardScreen(
         ) {
             item {
                 Text(
-                    text = "Recent Projects",
+                    text = "Recent Sessions",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                 )
             }
 
-            if (projects.isEmpty()) {
+            if (sessions.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -82,25 +83,23 @@ fun DashboardScreen(
                             modifier = Modifier.padding(32.dp).fillMaxWidth(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("No projects yet. Start a new session!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("No sessions yet. Start a new session!", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             } else {
-                items(projects) { project ->
+                items(sessions) { session ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { /* TBD project details */ },
+                            .clickable { onNavigateToSession(session.id) },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(text = project.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            Text(text = session.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = project.description, style = MaterialTheme.typography.bodyMedium)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val dateStr = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(project.updatedAt))
+                            val dateStr = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(session.updatedAt))
                             Text(text = "Updated: $dateStr", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }

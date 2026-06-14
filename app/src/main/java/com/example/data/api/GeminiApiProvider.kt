@@ -14,14 +14,24 @@ import retrofit2.http.Query
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
+
+@JsonClass(generateAdapter = true)
 data class GeminiRequest(val contents: List<Content>) {
+    @JsonClass(generateAdapter = true)
     data class Content(val parts: List<Part>)
+    @JsonClass(generateAdapter = true)
     data class Part(val text: String)
 }
 
+@JsonClass(generateAdapter = true)
 data class GeminiResponse(val candidates: List<Candidate>?) {
+    @JsonClass(generateAdapter = true)
     data class Candidate(val content: Content?)
+    @JsonClass(generateAdapter = true)
     data class Content(val parts: List<Part>?)
+    @JsonClass(generateAdapter = true)
     data class Part(val text: String?)
 }
 
@@ -36,9 +46,11 @@ interface GeminiService {
 
 class GeminiApiProvider : AiProvider {
 
+    private val moshi = Moshi.Builder().build()
+
     private val retrofit = Retrofit.Builder()
         .baseUrl("https://generativelanguage.googleapis.com/")
-        .addConverterFactory(MoshiConverterFactory.create())
+        .addConverterFactory(MoshiConverterFactory.create(moshi))
         .client(OkHttpClient.Builder().build())
         .build()
 

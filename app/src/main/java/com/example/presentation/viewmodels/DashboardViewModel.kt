@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.OrbitApplication
+import com.example.domain.model.ChatSession
 import com.example.domain.model.Project
 import com.example.domain.repository.OrbitRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,6 +20,13 @@ class DashboardViewModel(
 ) : ViewModel() {
 
     val projects: StateFlow<List<Project>> = repository.getAllProjects()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val sessions: StateFlow<List<ChatSession>> = repository.getAllSessions()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
