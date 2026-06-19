@@ -16,3 +16,4 @@
 local.properties
 .env
 debug.keystore
+aapt2-arm64
