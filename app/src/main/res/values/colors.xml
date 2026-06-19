@@ -2,4 +2,8 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="ic_orbit_bg">#FF0A0E1A</color>
+    <color name="ic_orbit_ring">#FF4A9EFF</color>
+    <color name="ic_orbit_core">#FF6BB8FF</color>
+    <color name="ic_orbit_glow">#FF80D0FF</color>
 </resources>
