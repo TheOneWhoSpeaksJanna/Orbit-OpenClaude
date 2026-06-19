@@ -132,25 +132,41 @@ val extractSqliteNative by tasks.registering {
       it.name.startsWith("sqlite-jdbc") && it.name.endsWith(".jar")
     } ?: return@doLast
 
+    val osName = System.getProperty("os.name").lowercase()
+    val osArch = System.getProperty("os.arch").lowercase()
+    val osPrefix = when {
+      osName.contains("linux") -> "Linux"
+      osName.contains("mac") || osName.contains("darwin") -> "Mac"
+      osName.contains("win") -> "Windows"
+      else -> "Linux"
+    }
+    val archSuffix = when {
+      osArch.contains("aarch64") || osArch.contains("arm64") -> "aarch64"
+      osArch.contains("amd64") || osArch.contains("x86_64") -> "x86_64"
+      osArch.contains("x86") -> "x86"
+      else -> "x86_64"
+    }
+
+    val nativeDir = "org/sqlite/native/$osPrefix/$archSuffix"
     val outputDir = layout.buildDirectory.dir("generated/sqlite-native").get().asFile
-    val androidDir = outputDir.resolve("org/sqlite/native/Linux-Android/aarch64")
-    delete(androidDir)
-    androidDir.mkdirs()
+    val libDir = outputDir.resolve(nativeDir)
+    delete(libDir)
+    libDir.mkdirs()
 
     copy {
       from(zipTree(sqliteJar)) {
-        include("org/sqlite/native/Linux-Android/aarch64/libsqlitejdbc.so")
+        include("$nativeDir/libsqlitejdbc.so")
       }
       into(outputDir)
     }
 
-    val soFile = androidDir.resolve("libsqlitejdbc.so")
+    val soFile = libDir.resolve("libsqlitejdbc.so")
     if (soFile.exists()) {
-      System.setProperty("org.sqlite.lib.path", androidDir.absolutePath)
+      System.setProperty("org.sqlite.lib.path", libDir.absolutePath)
       System.setProperty("org.sqlite.lib.name", "libsqlitejdbc.so")
-      logger.lifecycle("sqlite-jdbc Android native lib extracted to ${androidDir.absolutePath}")
+      logger.lifecycle("sqlite-jdbc native lib extracted to ${libDir.absolutePath}")
     } else {
-      logger.warn("Android aarch64 native lib NOT found in sqlite-jdbc jar")
+      logger.warn("Native lib NOT found for $osPrefix/$archSuffix in sqlite-jdbc jar")
     }
   }
 }
