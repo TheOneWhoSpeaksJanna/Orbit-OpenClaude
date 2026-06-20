@@ -112,9 +112,8 @@ fun SetupWizardScreen(
                         1 -> ThemeSelectionStep(viewModel)
                         2 -> AgentSelectionStep(viewModel)
                         3 -> ProviderSelectionStep(viewModel)
-                        4 -> ApiModelConfigStep(viewModel)
-                        5 -> ShizukuStep(viewModel)
-                        6 -> RuntimeSetupStep()
+                        4 -> ShizukuStep(viewModel)
+                        5 -> RuntimeSetupStep()
                     }
                 }
             }
@@ -245,6 +244,9 @@ fun AgentSelectionStep(viewModel: SetupViewModel) {
 fun ProviderSelectionStep(viewModel: SetupViewModel) {
     val selectedProvider by viewModel.selectedProvider.collectAsState()
     val agent by viewModel.selectedAgent.collectAsState()
+    val apiKey by viewModel.apiKey.collectAsState()
+    val isTesting by viewModel.isTestingConnection.collectAsState()
+    val success by viewModel.testConnectionSuccess.collectAsState()
     val providers = listOf("Claude", "OpenRouter", "OpenAI", "Gemini")
     
     Column(
@@ -284,26 +286,10 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
                 }
             }
         }
-    }
-}
-
-@Composable
-fun ApiModelConfigStep(viewModel: SetupViewModel) {
-    val provider by viewModel.selectedProvider.collectAsState()
-    val apiKey by viewModel.apiKey.collectAsState()
-    val model by viewModel.selectedModel.collectAsState()
-    val isTesting by viewModel.isTestingConnection.collectAsState()
-    val success by viewModel.testConnectionSuccess.collectAsState()
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(stringResource(R.string.configure_for, provider), style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(stringResource(R.string.api_key), style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
         
         OutlinedTextField(
             value = apiKey,
@@ -313,15 +299,6 @@ fun ApiModelConfigStep(viewModel: SetupViewModel) {
             singleLine = true
         )
         Spacer(modifier = Modifier.height(16.dp))
-        
-        OutlinedTextField(
-            value = model,
-            onValueChange = { viewModel.setSelectedModel(it) },
-            label = { Text(stringResource(R.string.model_name_optional)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(24.dp))
         
         Button(
             onClick = { viewModel.testConnection() },

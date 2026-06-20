@@ -21,6 +21,7 @@ interface AppContainer {
     val localCommandRunner: LocalCommandRunner
     val runtimeManager: com.omniclaw.data.local.runtime.OmniClawRuntimeManager
     val packageInstaller: com.omniclaw.data.local.runtime.PackageInstaller
+    val toolCallRecorder: ToolCallRecorder
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -54,6 +55,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val localCommandRunner: LocalCommandRunner by lazy {
         LocalCommandRunner(runtimeManager)
+    }
+
+    override val toolCallRecorder: ToolCallRecorder by lazy {
+        ToolCallRecorder()
     }
 
     override val toolRegistry: ToolRegistry by lazy {

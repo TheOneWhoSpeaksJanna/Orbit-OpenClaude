@@ -22,7 +22,6 @@ enum class SetupStep(@StringRes val labelResId: Int) {
     THEME(R.string.step_theme),
     AGENT(R.string.step_agent),
     PROVIDER(R.string.step_provider),
-    API_MODEL(R.string.step_api_model),
     SHIZUKU(R.string.step_shizuku),
     SUMMARY(R.string.step_summary)
 }
@@ -53,9 +52,6 @@ class SetupViewModel(
     private val _selectedProvider = MutableStateFlow("Claude")
     val selectedProvider: StateFlow<String> = _selectedProvider.asStateFlow()
 
-    private val _selectedModel = MutableStateFlow("")
-    val selectedModel: StateFlow<String> = _selectedModel.asStateFlow()
-
     private val _apiKey = MutableStateFlow("")
     val apiKey: StateFlow<String> = _apiKey.asStateFlow()
 
@@ -67,7 +63,6 @@ class SetupViewModel(
 
     val canAdvance: Boolean
         get() = when (currentStepDef) {
-            SetupStep.API_MODEL -> _apiKey.value.isNotBlank()
             SetupStep.SUMMARY -> false
             else -> true
         }
@@ -100,10 +95,6 @@ class SetupViewModel(
         _selectedProvider.value = provider
     }
 
-    fun setSelectedModel(model: String) {
-        _selectedModel.value = model
-    }
-
     fun setApiKey(key: String) {
         _apiKey.value = key
     }
@@ -113,11 +104,15 @@ class SetupViewModel(
             _isTestingConnection.value = true
             _testConnectionSuccess.value = null
             
-            val success = aiProvider.testConnection(
-                provider = _selectedProvider.value,
-                apiKey = _apiKey.value,
-                model = _selectedModel.value
-            )
+            val success = try {
+                aiProvider.testConnection(
+                    provider = _selectedProvider.value,
+                    apiKey = _apiKey.value,
+                    model = ""
+                )
+            } catch (e: Exception) {
+                false
+            }
             
             _testConnectionSuccess.value = success
             _isTestingConnection.value = false
@@ -130,7 +125,6 @@ class SetupViewModel(
             prefsManager.setShizukuEnabled(_shizukuEnabled.value)
             prefsManager.setSelectedAgent(_selectedAgent.value)
             prefsManager.setSelectedProvider(_selectedProvider.value)
-            prefsManager.setSelectedModel(_selectedModel.value)
             prefsManager.setApiKeyForProvider(_selectedProvider.value.lowercase(), _apiKey.value)
             
             val agentName = _selectedAgent.value
