@@ -1,5 +1,6 @@
 package com.example.presentation.screens
 
+import com.example.R
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll

@@ -1,5 +1,6 @@
 package com.example.presentation.screens
 
+import com.example.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll

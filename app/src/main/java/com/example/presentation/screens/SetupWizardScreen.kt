@@ -1,5 +1,6 @@
 package com.example.presentation.screens
 
+import com.example.R
 import android.content.pm.PackageManager
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
