@@ -318,7 +318,7 @@ fun ApiModelConfigStep(viewModel: SetupViewModel) {
 fun ShizukuStep(viewModel: SetupViewModel) {
     val shizukuEnabled by viewModel.shizukuEnabled.collectAsState()
     val context = LocalContext.current
-    var shizukuStatus by remember { mutableStateOf(stringResource(R.string.shizuku_status_checking)) }
+    var shizukuStatus by remember { mutableStateOf(context.getString(R.string.shizuku_status_checking)) }
     var hasPermission by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
