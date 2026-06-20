@@ -64,6 +64,7 @@ class SetupViewModel(
     val canAdvance: Boolean
         get() = when (currentStepDef) {
             SetupStep.SUMMARY -> false
+            SetupStep.PROVIDER -> _apiKey.value.isNotBlank()
             else -> true
         }
 

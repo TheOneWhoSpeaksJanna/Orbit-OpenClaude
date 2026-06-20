@@ -34,11 +34,11 @@ class AiProviderSelector : AiProvider {
     }
 
     override suspend fun createSession(sessionId: String, systemPrompt: String?) {
-        getProvider(metadata.name).createSession(sessionId, systemPrompt)
+        providers.values.forEach { it.createSession(sessionId, systemPrompt) }
     }
 
     override suspend fun deleteSession(sessionId: String) {
-        getProvider(metadata.name).deleteSession(sessionId)
+        providers.values.forEach { it.deleteSession(sessionId) }
     }
 
     override val metadata: ProviderMetadata = ProviderMetadata(

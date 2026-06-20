@@ -86,7 +86,7 @@ class TermuxViewModel(
     }
 
     fun executeCommand(command: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val executionResult = appContainer.localCommandRunner.executeCommand(command)
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),
@@ -100,7 +100,7 @@ class TermuxViewModel(
     }
 
     fun executePrivilegedCommand(command: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val executionResult = appContainer.localCommandRunner.executePrivilegedCommand(command)
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),

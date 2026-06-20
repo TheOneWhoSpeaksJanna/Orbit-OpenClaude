@@ -33,7 +33,7 @@ class OpenRouterProvider : AiProvider {
             try {
                 if (apiKey.isBlank()) return@withContext AiResult.Error("API Key is missing.")
 
-                val requestModel = if (model.isNotBlank()) model else "anthropic/claude-3-opus"
+                val requestModel = if (model.isNotBlank()) model else "openai/gpt-4o"
                 
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
@@ -80,10 +80,10 @@ class OpenRouterProvider : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "OpenRouter",
         displayName = "OpenRouter",
-        models = listOf("anthropic/claude-3-opus", "openai/gpt-4o", "google/gemini-1.5-pro"),
+        models = listOf("openai/gpt-4o", "anthropic/claude-sonnet-4", "google/gemini-2.0-flash-001"),
         supportsStreaming = true,
         requiresApiKey = true,
-        defaultModel = "anthropic/claude-3-opus"
+        defaultModel = "openai/gpt-4o"
     )
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {

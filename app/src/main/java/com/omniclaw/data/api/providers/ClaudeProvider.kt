@@ -33,7 +33,7 @@ class ClaudeProvider : AiProvider {
             try {
                 if (apiKey.isBlank()) return@withContext AiResult.Error("API Key is missing.")
 
-                val requestModel = if (model.isNotBlank()) model else "claude-3-opus-20240229"
+                val requestModel = if (model.isNotBlank()) model else "claude-sonnet-4-20250514"
                 
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
@@ -83,10 +83,10 @@ class ClaudeProvider : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "Claude",
         displayName = "Anthropic Claude",
-        models = listOf("claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"),
+        models = listOf("claude-sonnet-4-20250514", "claude-haiku-3-5-20241022", "claude-opus-4-20250514"),
         supportsStreaming = true,
         requiresApiKey = true,
-        defaultModel = "claude-3-opus-20240229"
+        defaultModel = "claude-sonnet-4-20250514"
     )
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {

@@ -10,6 +10,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,9 +37,10 @@ data class GeminiResponse(val candidates: List<Candidate>?) {
 }
 
 interface GeminiService {
-    @POST("v1beta/models/gemini-1.5-pro-latest:generateContent")
+    @POST("v1beta/models/{model}:generateContent")
     suspend fun generateContent(
-        @Query("key") apiKey: String,
+        @Path("model") model: String,
+        @Header("X-Goog-Api-Key") apiKey: String,
         @Header("Content-Type") contentType: String = "application/json",
         @Body request: GeminiRequest
     ): GeminiResponse

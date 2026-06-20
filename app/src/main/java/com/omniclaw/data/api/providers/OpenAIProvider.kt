@@ -33,7 +33,7 @@ class OpenAIProvider : AiProvider {
             try {
                 if (apiKey.isBlank()) return@withContext AiResult.Error("API Key is missing.")
 
-                val requestModel = if (model.isNotBlank()) model else "gpt-3.5-turbo"
+                val requestModel = if (model.isNotBlank()) model else "gpt-4o"
                 
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
@@ -80,10 +80,10 @@ class OpenAIProvider : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "OpenAI",
         displayName = "OpenAI",
-        models = listOf("gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o"),
+        models = listOf("gpt-4o", "gpt-4o-mini", "gpt-4-turbo"),
         supportsStreaming = true,
         requiresApiKey = true,
-        defaultModel = "gpt-3.5-turbo"
+        defaultModel = "gpt-4o"
     )
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {

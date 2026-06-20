@@ -39,7 +39,7 @@ class GeminiProvider : AiProvider {
             emit(AiEvent.Error("API Key is missing."))
             return@flow
         }
-        val requestModel = if (model.isNotBlank()) model else "gemini-1.5-pro-latest"
+        val requestModel = if (model.isNotBlank()) model else "gemini-2.0-flash-exp"
         val jsonBody = JSONObject().apply {
             val contents = org.json.JSONArray().apply {
                 put(JSONObject().apply {
@@ -52,12 +52,15 @@ class GeminiProvider : AiProvider {
         }
 
         val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/$requestModel:streamGenerateContent?alt=sse&key=$apiKey")
+            .url("https://generativelanguage.googleapis.com/v1beta/models/$requestModel:streamGenerateContent?alt=sse")
+            .header("X-Goog-Api-Key", apiKey)
             .post(jsonBody.toString().toRequestBody(jsonMediaType))
             .build()
 
         try {
-            val response = httpClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) {
+                httpClient.newCall(request).execute()
+            }
             val source = response.body?.source()
             if (source == null) {
                 emit(AiEvent.Error("Empty response from Gemini."))
@@ -83,7 +86,9 @@ class GeminiProvider : AiProvider {
                                 emit(AiEvent.Chunk(text))
                             }
                         }
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) {
+                        emit(AiEvent.Error("Parse error: ${e.message}"))
+                    }
                 }
             }
             emit(AiEvent.Done(fullText.toString()))
@@ -98,12 +103,12 @@ class GeminiProvider : AiProvider {
                 if (apiKey.isBlank()) {
                     return@withContext AiResult.Error("API Key is missing.")
                 }
-                val requestModel = if (model.isNotBlank()) model else "gemini-1.5-pro-latest"
+                val requestModel = if (model.isNotBlank()) model else "gemini-2.0-flash-exp"
                 val request = GeminiRequest(
                     contents = listOf(GeminiRequest.Content(parts = listOf(GeminiRequest.Part(text = prompt))))
                 )
 
-                val response = service.generateContent(apiKey = apiKey, request = request)
+                val response = service.generateContent(model = requestModel, apiKey = apiKey, request = request)
                 val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
 
                 if (text != null) {
@@ -123,20 +128,21 @@ class GeminiProvider : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "Gemini",
         displayName = "Google Gemini",
-        models = listOf("gemini-1.5-pro-latest", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp"),
+        models = listOf("gemini-2.0-flash-exp", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"),
         supportsStreaming = true,
         requiresApiKey = true,
-        defaultModel = "gemini-1.5-pro-latest"
+        defaultModel = "gemini-2.0-flash-exp"
     )
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 if (apiKey.isBlank()) return@withContext false
+                val requestModel = if (model.isNotBlank()) model else "gemini-2.0-flash-exp"
                 val request = GeminiRequest(
                     contents = listOf(GeminiRequest.Content(parts = listOf(GeminiRequest.Part(text = "Hi"))))
                 )
-                service.generateContent(apiKey = apiKey, request = request)
+                service.generateContent(model = requestModel, apiKey = apiKey, request = request)
                 true
             } catch (e: Exception) {
                 false

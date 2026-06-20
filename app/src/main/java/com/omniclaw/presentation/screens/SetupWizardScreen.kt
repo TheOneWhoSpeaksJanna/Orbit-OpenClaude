@@ -113,7 +113,7 @@ fun SetupWizardScreen(
                         2 -> AgentSelectionStep(viewModel)
                         3 -> ProviderSelectionStep(viewModel)
                         4 -> ShizukuStep(viewModel)
-                        5 -> RuntimeSetupStep()
+                        5 -> SummaryStep()
                     }
                 }
             }
@@ -438,7 +438,7 @@ private fun PageIndicator(totalSteps: Int, currentStep: Int) {
 }
 
 @Composable
-fun RuntimeSetupStep() {
+fun SummaryStep() {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -446,7 +446,7 @@ fun RuntimeSetupStep() {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center
     ) {
-        Text(stringResource(R.string.local_runtime_setup), style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.step_summary), style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     stringResource(R.string.runtime_description),
