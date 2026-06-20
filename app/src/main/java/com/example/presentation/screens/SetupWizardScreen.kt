@@ -332,12 +332,12 @@ fun ShizukuStep(viewModel: SetupViewModel) {
         if (isInstalled) {
             if (Shizuku.pingBinder()) {
                 hasPermission = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-                shizukuStatus = if (hasPermission) stringResource(R.string.shizuku_status_running) else stringResource(R.string.shizuku_status_no_permission)
+                shizukuStatus = if (hasPermission) context.getString(R.string.shizuku_status_running) else context.getString(R.string.shizuku_status_no_permission)
             } else {
-                shizukuStatus = stringResource(R.string.shizuku_status_not_running)
+                shizukuStatus = context.getString(R.string.shizuku_status_not_running)
             }
         } else {
-            shizukuStatus = stringResource(R.string.shizuku_status_not_installed)
+            shizukuStatus = context.getString(R.string.shizuku_status_not_installed)
         }
     }
 
