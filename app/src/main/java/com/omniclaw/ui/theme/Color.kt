@@ -24,3 +24,6 @@ val OmniClawAccentSecondary = Color(0xFF818CF8)
 val OmniClawSuccess = Color(0xFF34D399)
 val OmniClawWarning = Color(0xFFF59E0B)
 val OmniClawError = Color(0xFFF87171)
+
+val OmniClawGlassBorder = Color(0xFF2E3440)
+val OmniClawGlassOverlay = Color(0x1AFFFFFF)

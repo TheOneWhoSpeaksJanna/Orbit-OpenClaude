@@ -6,7 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.omniclaw.presentation.screens.ChatScreen
-import com.omniclaw.presentation.screens.DashboardScreen
+import com.omniclaw.presentation.dashboard.DashboardScreen
 import com.omniclaw.presentation.screens.SettingsScreen
 import com.omniclaw.presentation.screens.TermuxScreen
 
@@ -30,17 +30,14 @@ fun OmniClawNavGraph(
         }
         composable(Routes.DASHBOARD) {
             DashboardScreen(
-                onNavigateToSession = { sessionId ->
-                    navController.navigate(Routes.createChatRoute(sessionId))
-                },
-                onNavigateToNewSession = {
+                onNavigateToChat = {
                     navController.navigate(Routes.CHAT_NEW)
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Routes.SETTINGS)
                 },
                 onNavigateToTermux = {
                     navController.navigate(Routes.TERMUX)
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Routes.SETTINGS)
                 }
             )
         }
