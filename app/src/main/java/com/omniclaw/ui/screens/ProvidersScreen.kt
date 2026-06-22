@@ -20,7 +20,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -123,7 +130,7 @@ private fun ProviderHealthCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Cloud,
+                    imageVector = providerIcon(provider.name),
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
                     tint = providerAccent(provider.name)
@@ -201,7 +208,21 @@ private fun providerAccent(name: String): Color = when (name) {
     "OpenAI" -> Color(0xFF10A37F)
     "Gemini" -> Color(0xFF4285F4)
     "OpenRouter" -> Color(0xFFFF6B35)
+    "DeepSeek" -> Color(0xFF4F6CF7)
+    "Groq" -> Color(0xFFF97316)
+    "Ollama" -> Color(0xFF8B5CF6)
     else -> OmniClawAccent
+}
+
+private fun providerIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector = when (name) {
+    "Claude" -> Icons.Default.Send
+    "OpenAI" -> Icons.Default.Lightbulb
+    "Gemini" -> Icons.Default.Star
+    "OpenRouter" -> Icons.Default.Share
+    "DeepSeek" -> Icons.Default.Search
+    "Groq" -> Icons.Default.FlashOn
+    "Ollama" -> Icons.Default.Computer
+    else -> Icons.Default.Cloud
 }
 
 private fun ConnectionState.statusColor(): Color = when (this) {

@@ -42,7 +42,7 @@ class ProvidersViewModel(
 ) : ViewModel() {
 
     private val _providers = MutableStateFlow(
-        listOf("Claude", "OpenAI", "Gemini", "OpenRouter").map { name ->
+        listOf("Claude", "OpenAI", "Gemini", "OpenRouter", "DeepSeek", "Groq", "Ollama").map { name ->
             ProviderConfig(name = name, apiKeyConfigured = false)
         }
     )
@@ -71,6 +71,16 @@ class ProvidersViewModel(
 
     fun verifyConnection(providerName: String) {
         viewModelScope.launch {
+            // Ollama is localhost — no API key needed
+            if (providerName == "Ollama") {
+                updateProviderState(providerName, ConnectionState.Verifying)
+                val result = withContext(Dispatchers.IO) {
+                    performHealthCheck(providerName, "")
+                }
+                updateProviderState(providerName, result)
+                return@launch
+            }
+
             val key = prefsManager.getApiKeyForProvider(providerName)
 
             if (key.isNullOrBlank()) {
@@ -153,6 +163,23 @@ class ProvidersViewModel(
             "OpenRouter" -> Request.Builder()
                 .url("https://openrouter.ai/api/v1/models")
                 .header("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+
+            "DeepSeek" -> Request.Builder()
+                .url("https://api.deepseek.com/v1/models")
+                .header("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+
+            "Groq" -> Request.Builder()
+                .url("https://api.groq.com/openai/v1/models")
+                .header("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+
+            "Ollama" -> Request.Builder()
+                .url("http://localhost:11434/api/tags")
                 .get()
                 .build()
 

@@ -2,6 +2,7 @@ package com.omniclaw.core.di
 
 import android.content.Context
 import androidx.room.Room
+import com.omniclaw.data.api.AgentDownloaderImpl
 import com.omniclaw.data.api.tools.ExecuteCommandTool
 import com.omniclaw.data.api.tools.SudoCommandTool
 import com.omniclaw.data.api.tools.ToolRegistry
@@ -10,8 +11,12 @@ import com.omniclaw.data.local.prefs.CredentialsStore
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.repository.OmniClawRepositoryImpl
+import com.omniclaw.data.repository.OpenCodeRepositoryImpl
+import com.omniclaw.domain.api.AgentDownloader
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.repository.OmniClawRepository
+import com.omniclaw.domain.repository.OpenCodeRepository
+import java.io.File
 
 interface AppContainer {
     val repository: OmniClawRepository
@@ -22,6 +27,8 @@ interface AppContainer {
     val runtimeManager: com.omniclaw.data.local.runtime.OmniClawRuntimeManager
     val packageInstaller: com.omniclaw.data.local.runtime.PackageInstaller
     val toolCallRecorder: ToolCallRecorder
+    val openCodeRepository: OpenCodeRepository
+    val agentDownloader: AgentDownloader
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -68,5 +75,17 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
                 SudoCommandTool(localCommandRunner)
             )
         )
+    }
+
+    private val downloadDir: File by lazy {
+        File(context.filesDir, "opencode_agents").also { it.mkdirs() }
+    }
+
+    override val openCodeRepository: OpenCodeRepository by lazy {
+        OpenCodeRepositoryImpl()
+    }
+
+    override val agentDownloader: AgentDownloader by lazy {
+        AgentDownloaderImpl(downloadDir)
     }
 }
