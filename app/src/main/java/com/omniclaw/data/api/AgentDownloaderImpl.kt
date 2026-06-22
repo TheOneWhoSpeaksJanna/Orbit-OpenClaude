@@ -52,7 +52,7 @@ class AgentDownloaderImpl(
                 FileOutputStream(outputFile).use { output ->
                     val buffer = ByteArray(8192)
                     var bytesRead: Long = 0
-                    var lastEmittedProgress = -1f
+                    var lastEmittedProgress = -1
                     var read: Int
 
                     while (inputStream.read(buffer).also { read = it } != -1) {
