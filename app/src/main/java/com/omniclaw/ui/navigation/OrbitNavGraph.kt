@@ -31,7 +31,10 @@ fun OmniClawNavGraph(
         }
         composable(Routes.DASHBOARD) {
             DashboardScreen(
-                onNavigateToChat = {
+                onNavigateToSession = { sessionId ->
+                    navController.navigate(Routes.createChatRoute(sessionId))
+                },
+                onNavigateToNewSession = {
                     navController.navigate(Routes.CHAT_NEW)
                 },
                 onNavigateToTermux = {

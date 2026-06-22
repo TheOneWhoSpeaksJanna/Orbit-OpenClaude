@@ -90,7 +90,8 @@ fun AppShell() {
             ) { tab ->
                 when (tab) {
                     BottomNavTab.HOME -> DashboardScreen(
-                        onNavigateToChat = { selectedTab = BottomNavTab.CHAT },
+                        onNavigateToSession = { selectedTab = BottomNavTab.CHAT },
+                        onNavigateToNewSession = { selectedTab = BottomNavTab.CHAT },
                         onNavigateToTermux = { },
                         onNavigateToSettings = { selectedTab = BottomNavTab.SETTINGS }
                     )
