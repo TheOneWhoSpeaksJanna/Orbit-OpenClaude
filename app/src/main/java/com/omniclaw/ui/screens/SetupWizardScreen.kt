@@ -93,7 +93,8 @@ fun SetupWizardScreen(
                     Button(onClick = {
                         viewModel.completeSetup()
                         scope.launch {
-                            delay(300)
+                            delay(400)
+                            viewModel.finishOnboarding()
                             onFinishSetup()
                         }
                     }) {

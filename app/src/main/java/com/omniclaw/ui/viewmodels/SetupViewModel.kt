@@ -127,6 +127,11 @@ class SetupViewModel(
                 systemPrompt = sysPrompt
             )
             repository.insertAgent(agent)
+        }
+    }
+
+    fun finishOnboarding() {
+        viewModelScope.launch {
             prefsManager.setOnboardingComplete(true)
         }
     }

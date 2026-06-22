@@ -88,8 +88,18 @@ class OpenRouterProvider : AiProvider {
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {
         return withContext(Dispatchers.IO) {
-            val result = generateContent("Hi", apiKey, provider, model)
-            result is AiResult.Success
+            try {
+                if (apiKey.isBlank()) return@withContext false
+                val request = Request.Builder()
+                    .url("https://openrouter.ai/api/v1/auth/key")
+                    .header("Authorization", "Bearer $apiKey")
+                    .get()
+                    .build()
+                val response = httpClient.newCall(request).execute()
+                response.isSuccessful
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 }
