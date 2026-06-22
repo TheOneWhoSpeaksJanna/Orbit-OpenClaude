@@ -48,7 +48,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val updateManager: UpdateManager by lazy {
-        UpdateManager(context)
+        UpdateManager(context, prefsManager)
     }
 
     override val aiProvider: AiProvider by lazy {

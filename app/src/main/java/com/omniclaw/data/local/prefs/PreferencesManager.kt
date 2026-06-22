@@ -25,6 +25,7 @@ class PreferencesManager(private val context: Context) {
         val OPENAI_API_KEY = stringPreferencesKey("openai_api_key")
         val CLAUDE_API_KEY = stringPreferencesKey("claude_api_key")
         val OPENROUTER_API_KEY = stringPreferencesKey("openrouter_api_key")
+        val GITHUB_TOKEN = stringPreferencesKey("github_token")
     }
 
     val themeMode: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -66,6 +67,10 @@ class PreferencesManager(private val context: Context) {
 
     val openRouterApiKey: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[OPENROUTER_API_KEY]
+    }
+
+    val githubToken: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[GITHUB_TOKEN]
     }
 
     // Unified: get API key for the currently selected provider
@@ -117,6 +122,10 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setOpenRouterApiKey(key: String) {
         context.dataStore.edit { prefs -> prefs[OPENROUTER_API_KEY] = key }
+    }
+
+    suspend fun setGithubToken(token: String) {
+        context.dataStore.edit { prefs -> prefs[GITHUB_TOKEN] = token }
     }
 
     suspend fun setApiKeyForProvider(provider: String, key: String) {

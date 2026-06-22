@@ -35,6 +35,7 @@ fun SettingsScreen(
     val openAiApiKey by viewModel.openAiApiKey.collectAsState()
     val claudeApiKey by viewModel.claudeApiKey.collectAsState()
     val openRouterApiKey by viewModel.openRouterApiKey.collectAsState()
+    val githubToken by viewModel.githubToken.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
     val appVersion = viewModel.appVersion
@@ -43,6 +44,7 @@ fun SettingsScreen(
     var openAiVisible by remember { mutableStateOf(false) }
     var claudeVisible by remember { mutableStateOf(false) }
     var openRouterVisible by remember { mutableStateOf(false) }
+    var githubTokenVisible by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -110,6 +112,15 @@ fun SettingsScreen(
                         label = stringResource(R.string.api_key_openrouter),
                         visible = openRouterVisible,
                         onToggleVisibility = { openRouterVisible = !openRouterVisible }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // GitHub token for private repo update checks
+                    ApiKeyField(
+                        value = githubToken,
+                        onValueChange = { viewModel.updateGithubToken(it) },
+                        label = "GitHub Token",
+                        visible = githubTokenVisible,
+                        onToggleVisibility = { githubTokenVisible = !githubTokenVisible }
                     )
                 }
             }

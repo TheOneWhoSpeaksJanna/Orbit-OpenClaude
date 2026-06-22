@@ -11,7 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import com.omniclaw.data.local.prefs.PreferencesManager
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -38,7 +40,8 @@ sealed class UpdateState {
 }
 
 class UpdateManager(
-    private val context: Context
+    private val context: Context,
+    private val prefsManager: PreferencesManager
 ) {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -51,24 +54,37 @@ class UpdateManager(
     private val repoOwner = "TheOneWhoSpeaksJanna"
     private val repoName = "Orbit-AI"
 
+    private suspend fun githubToken(): String? {
+        return prefsManager.githubToken.first()
+    }
+
+    private suspend fun buildAuthenticatedRequest(url: String): Request {
+        val token = githubToken()
+        val builder = Request.Builder()
+            .url(url)
+            .header("Accept", "application/vnd.github.v3+json")
+        if (!token.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $token")
+        }
+        return builder.build()
+    }
+
     suspend fun checkForUpdates() {
         _updateState.value = UpdateState.Checking
         try {
             val result = withContext(Dispatchers.IO) {
                 val response = httpClient.newCall(
-                    Request.Builder()
-                        .url("https://api.github.com/repos/$repoOwner/$repoName/releases/latest")
-                        .header("Accept", "application/vnd.github.v3+json")
-                        .build()
+                    buildAuthenticatedRequest(
+                        "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
+                    )
                 ).execute()
 
                 if (response.code == 404) {
-                    // No releases published yet - try listing all releases
+                    // Either no releases or private repo without token
                     val listResponse = httpClient.newCall(
-                        Request.Builder()
-                            .url("https://api.github.com/repos/$repoOwner/$repoName/releases?per_page=1")
-                            .header("Accept", "application/vnd.github.v3+json")
-                            .build()
+                        buildAuthenticatedRequest(
+                            "https://api.github.com/repos/$repoOwner/$repoName/releases?per_page=1"
+                        )
                     ).execute()
 
                     if (!listResponse.isSuccessful || listResponse.body == null) {

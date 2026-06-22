@@ -34,6 +34,9 @@ class SettingsViewModel(
     private val _openRouterApiKey = MutableStateFlow("")
     val openRouterApiKey: StateFlow<String> = _openRouterApiKey.asStateFlow()
 
+    private val _githubToken = MutableStateFlow("")
+    val githubToken: StateFlow<String> = _githubToken.asStateFlow()
+
     private val _themeMode = MutableStateFlow("system")
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
@@ -47,6 +50,7 @@ class SettingsViewModel(
             _openAiApiKey.value = prefsManager.getApiKeyForProvider("OpenAI").firstOrNull() ?: ""
             _claudeApiKey.value = prefsManager.getApiKeyForProvider("Claude").firstOrNull() ?: ""
             _openRouterApiKey.value = prefsManager.getApiKeyForProvider("OpenRouter").firstOrNull() ?: ""
+            _githubToken.value = prefsManager.githubToken.firstOrNull() ?: ""
             _themeMode.value = prefsManager.themeMode.firstOrNull() ?: "system"
         }
     }
@@ -69,6 +73,11 @@ class SettingsViewModel(
     fun updateOpenRouterApiKey(key: String) {
         _openRouterApiKey.value = key
         viewModelScope.launch { prefsManager.setApiKeyForProvider("OpenRouter", key) }
+    }
+
+    fun updateGithubToken(token: String) {
+        _githubToken.value = token
+        viewModelScope.launch { prefsManager.setGithubToken(token) }
     }
 
     fun updateThemeMode(mode: String) {
