@@ -59,6 +59,19 @@ class SetupViewModel(
     private val _testConnectionSuccess = MutableStateFlow<Boolean?>(null)
     val testConnectionSuccess: StateFlow<Boolean?> = _testConnectionSuccess.asStateFlow()
 
+    val canAdvance: Boolean
+        get() {
+            val step = SetupStep.entries[_currentStep.value]
+            return when (step) {
+                SetupStep.Welcome -> true
+                SetupStep.Theme -> _theme.value.isNotBlank()
+                SetupStep.Agent -> _selectedAgent.value.isNotBlank()
+                SetupStep.Provider -> _apiKey.value.isNotBlank()
+                SetupStep.Shizuku -> true
+                SetupStep.Summary -> true
+            }
+        }
+
     fun nextStep() { _currentStep.value += 1 }
 
     fun previousStep() {
