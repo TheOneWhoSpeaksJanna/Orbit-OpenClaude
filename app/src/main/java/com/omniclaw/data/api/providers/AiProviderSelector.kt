@@ -4,6 +4,7 @@ import com.omniclaw.domain.api.AiEvent
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
 import com.omniclaw.domain.api.ProviderMetadata
+import com.omniclaw.domain.models.DetailedModelInfo
 import kotlinx.coroutines.flow.Flow
 
 class AiProviderSelector : AiProvider {
@@ -42,6 +43,9 @@ class AiProviderSelector : AiProvider {
     }
 
     override fun getModels(providerName: String): List<String> = getProvider(providerName).getModels(providerName)
+
+    override suspend fun fetchDetailedModels(providerName: String, apiKey: String): List<DetailedModelInfo> =
+        getProvider(providerName).fetchDetailedModels(providerName, apiKey)
 
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "All",

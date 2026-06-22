@@ -12,6 +12,7 @@ import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
 import com.omniclaw.domain.models.ChatSession
+import com.omniclaw.domain.models.DetailedModelInfo
 import com.omniclaw.domain.models.Message
 import com.omniclaw.domain.models.MessageRole
 import com.omniclaw.domain.models.TermuxLog
@@ -45,6 +46,12 @@ class ChatViewModel(
     private val _availableModels = MutableStateFlow<List<String>>(emptyList())
     val availableModels: StateFlow<List<String>> = _availableModels.asStateFlow()
 
+    private val _detailedModels = MutableStateFlow<List<DetailedModelInfo>>(emptyList())
+    val detailedModels: StateFlow<List<DetailedModelInfo>> = _detailedModels.asStateFlow()
+
+    private val _isFetchingModels = MutableStateFlow(false)
+    val isFetchingModels: StateFlow<Boolean> = _isFetchingModels.asStateFlow()
+
     val selectedModel: StateFlow<String> = prefsManager.selectedModel
         .map { it ?: "" }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
@@ -53,6 +60,28 @@ class ChatViewModel(
         viewModelScope.launch {
             val provider = prefsManager.selectedProvider.firstOrNull() ?: "Gemini"
             _availableModels.value = aiProvider.getModels(provider)
+        }
+    }
+
+    fun fetchDetailedModels() {
+        viewModelScope.launch {
+            val provider = prefsManager.selectedProvider.firstOrNull() ?: "Gemini"
+            if (provider != "OpenRouter") return@launch
+            _isFetchingModels.value = true
+            val apiKey = prefsManager.getApiKeyForProvider(provider).firstOrNull() ?: ""
+            if (apiKey.isBlank()) {
+                _isFetchingModels.value = false
+                return@launch
+            }
+            try {
+                val models = aiProvider.fetchDetailedModels(provider, apiKey)
+                _detailedModels.value = models
+                _availableModels.value = models.map { it.id }
+            } catch (_: Exception) {
+                // Keep current list on failure
+            } finally {
+                _isFetchingModels.value = false
+            }
         }
     }
 

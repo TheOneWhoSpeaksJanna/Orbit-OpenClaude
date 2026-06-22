@@ -66,18 +66,22 @@ class SetupViewModel(
     private val _testConnectionSuccess = MutableStateFlow<Boolean?>(null)
     val testConnectionSuccess: StateFlow<Boolean?> = _testConnectionSuccess.asStateFlow()
 
-    // OpenClaude install state
-    private val _isInstalling = MutableStateFlow(false)
-    val isInstalling: StateFlow<Boolean> = _isInstalling.asStateFlow()
+    // Per-agent install state
+    data class AgentInstallState(
+        val isInstalling: Boolean = false,
+        val progress: Float = 0f,
+        val status: String = "",
+        val isInstalled: Boolean = false
+    )
 
-    private val _installProgress = MutableStateFlow(0f)
-    val installProgress: StateFlow<Float> = _installProgress.asStateFlow()
-
-    private val _installStatus = MutableStateFlow("")
-    val installStatus: StateFlow<String> = _installStatus.asStateFlow()
-
-    private val _isInstalled = MutableStateFlow(false)
-    val isInstalled: StateFlow<Boolean> = _isInstalled.asStateFlow()
+    private val _agentInstallStates = MutableStateFlow(
+        mapOf(
+            "Hermes" to AgentInstallState(),
+            "OpenClaude" to AgentInstallState(),
+            "Claude Code" to AgentInstallState()
+        )
+    )
+    val agentInstallStates: StateFlow<Map<String, AgentInstallState>> = _agentInstallStates.asStateFlow()
 
     val canAdvance: Boolean
         get() {
@@ -128,22 +132,38 @@ class SetupViewModel(
         }
     }
 
-    fun installOpenClaude() {
-        val targetDir = File(runtimeManager.agentsDir, "openclaude")
+    fun installOpenClaude() = installAgent("OpenClaude")
+    fun installHermes() = installAgent("Hermes")
+    fun installClaudeCode() = installAgent("Claude Code")
+
+    fun installAgent(agentName: String) {
+        val repoUrl = "https://github.com/Gitlawb/openclaude.git"
+        val targetDirName = when (agentName) {
+            "OpenClaude" -> "openclaude"
+            "Hermes" -> "hermes"
+            "Claude Code" -> "claude_code"
+            else -> agentName.lowercase().replace(" ", "_")
+        }
+        val targetDir = File(runtimeManager.agentsDir, targetDirName)
         val binDir = runtimeManager.binDir
-        val wrapperFile = File(binDir, "openclaude")
+        val wrapperName = when (agentName) {
+            "Claude Code" -> "claude-code"
+            else -> agentName.lowercase()
+        }
+        val wrapperFile = File(binDir, wrapperName)
 
         viewModelScope.launch {
-            _isInstalling.value = true
-            _installProgress.value = 0f
-            _installStatus.value = "Starting installation..."
-            _isInstalled.value = false
+            _agentInstallStates.value = _agentInstallStates.value + (agentName to AgentInstallState(
+                isInstalling = true,
+                progress = 0f,
+                status = "Starting installation...",
+                isInstalled = false
+            ))
 
             try {
                 // Step 1: Check prerequisites
-                _installStatus.value = "Checking prerequisites..."
+                updateInstallState(agentName, status = "Checking prerequisites...")
                 withContext(Dispatchers.IO) {
-                    // Try to detect node and npm via PATH
                     localCommandRunner.executeCommandStreamed(
                         "command -v node || echo MISSING_NODE",
                         onOutput = { }
@@ -155,10 +175,8 @@ class SetupViewModel(
                 }
 
                 // Step 2: Clone the repository
-                _installProgress.value = 0.1f
-                _installStatus.value = "Cloning OpenClaude repository..."
+                updateInstallState(agentName, progress = 0.1f, status = "Cloning $agentName repository...")
 
-                // Remove existing directory if present
                 if (targetDir.exists()) {
                     targetDir.deleteRecursively()
                 }
@@ -166,10 +184,10 @@ class SetupViewModel(
                 val cloneOutput = StringBuilder()
                 val cloneResult = withContext(Dispatchers.IO) {
                     localCommandRunner.executeCommandStreamed(
-                        "git clone --depth 1 https://github.com/lizhi-cs/openclaude.git ${targetDir.absolutePath} 2>&1",
+                        "git clone --depth 1 $repoUrl ${targetDir.absolutePath} 2>&1",
                         onOutput = { line ->
                             cloneOutput.appendLine(line)
-                            _installStatus.value = line.take(80)
+                            updateInstallState(agentName, status = line.take(80))
                         }
                     )
                 }
@@ -178,8 +196,7 @@ class SetupViewModel(
                     throw Exception("Git clone failed: ${cloneOutput.toString().take(200)}")
                 }
 
-                _installProgress.value = 0.4f
-                _installStatus.value = "Installing dependencies..."
+                updateInstallState(agentName, progress = 0.4f, status = "Installing dependencies...")
 
                 // Step 3: Install npm dependencies
                 val npmOutput = StringBuilder()
@@ -189,7 +206,7 @@ class SetupViewModel(
                         onOutput = { line ->
                             npmOutput.appendLine(line)
                             if (line.contains("added", ignoreCase = true) || line.contains("saved", ignoreCase = true)) {
-                                _installStatus.value = line.take(80)
+                                updateInstallState(agentName, status = line.take(80))
                             }
                         }
                     )
@@ -199,8 +216,7 @@ class SetupViewModel(
                     throw Exception("npm install failed: ${npmOutput.toString().take(200)}")
                 }
 
-                _installProgress.value = 0.7f
-                _installStatus.value = "Building OpenClaude..."
+                updateInstallState(agentName, progress = 0.7f, status = "Building $agentName...")
 
                 // Step 4: Build
                 val buildOutput = StringBuilder()
@@ -210,7 +226,7 @@ class SetupViewModel(
                         onOutput = { line ->
                             buildOutput.appendLine(line)
                             if (line.contains("success", ignoreCase = true) || line.contains("built", ignoreCase = true)) {
-                                _installStatus.value = line.take(80)
+                                updateInstallState(agentName, status = line.take(80))
                             }
                         }
                     )
@@ -220,13 +236,12 @@ class SetupViewModel(
                     throw Exception("Build failed: ${buildOutput.toString().take(200)}")
                 }
 
-                _installProgress.value = 0.9f
-                _installStatus.value = "Creating run script..."
+                updateInstallState(agentName, progress = 0.9f, status = "Creating run script...")
 
                 // Step 5: Create wrapper script
                 val wrapperScript = """
                     #!/data/data/com.termux/files/usr/bin/bash
-                    exec node ${targetDir.absolutePath}/dist/cli.js "\$@"
+                    exec node ${targetDir.absolutePath}/dist/cli.js "${'$'}@"
                 """.trimIndent()
 
                 withContext(Dispatchers.IO) {
@@ -235,17 +250,23 @@ class SetupViewModel(
                     wrapperFile.setExecutable(true)
                 }
 
-                _installProgress.value = 1f
-                _installStatus.value = "OpenClaude installed successfully!"
-                _isInstalled.value = true
+                updateInstallState(agentName, progress = 1f, status = "$agentName installed successfully!", isInstalled = true)
 
             } catch (e: Exception) {
-                _installStatus.value = "Installation failed: ${e.message}"
-                _isInstalled.value = false
+                updateInstallState(agentName, status = "Installation failed: ${e.message}", isInstalled = false)
             } finally {
-                _isInstalling.value = false
+                _agentInstallStates.value = _agentInstallStates.value + (agentName to _agentInstallStates.value[agentName]!!.copy(isInstalling = false))
             }
         }
+    }
+
+    private fun updateInstallState(agentName: String, progress: Float? = null, status: String? = null, isInstalled: Boolean? = null) {
+        val current = _agentInstallStates.value[agentName] ?: AgentInstallState()
+        _agentInstallStates.value = _agentInstallStates.value + (agentName to current.copy(
+            progress = progress ?: current.progress,
+            status = status ?: current.status,
+            isInstalled = isInstalled ?: current.isInstalled
+        ))
     }
 
     fun completeSetup() {

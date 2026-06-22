@@ -1,5 +1,6 @@
 package com.omniclaw.domain.api
 
+import com.omniclaw.domain.models.DetailedModelInfo
 import kotlinx.coroutines.flow.Flow
 
 interface AiProvider {
@@ -26,6 +27,8 @@ interface AiProvider {
     val metadata: ProviderMetadata
 
     fun getModels(providerName: String): List<String>
+
+    suspend fun fetchDetailedModels(providerName: String, apiKey: String): List<DetailedModelInfo> = emptyList()
 }
 
 sealed class AiResult {

@@ -222,10 +222,7 @@ fun ThemeSelectionStep(viewModel: SetupViewModel) {
 @Composable
 fun AgentSelectionStep(viewModel: SetupViewModel) {
     val selectedAgent by viewModel.selectedAgent.collectAsState()
-    val isInstalling by viewModel.isInstalling.collectAsState()
-    val installProgress by viewModel.installProgress.collectAsState()
-    val installStatus by viewModel.installStatus.collectAsState()
-    val isInstalled by viewModel.isInstalled.collectAsState()
+    val agentInstallStates by viewModel.agentInstallStates.collectAsState()
     val agents = listOf("Hermes", "OpenClaude", "Claude Code")
 
     Column(
@@ -292,70 +289,69 @@ fun AgentSelectionStep(viewModel: SetupViewModel) {
             }
         }
 
-        // OpenClaude install section
-        if (selectedAgent == "OpenClaude") {
-            Spacer(modifier = Modifier.height(24.dp))
-            when {
-                isInstalling -> {
-                    LinearProgressIndicator(
-                        progress = { installProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
+        // Agent install section (shown for selected agent)
+        val agentState = agentInstallStates[selectedAgent] ?: SetupViewModel.AgentInstallState()
+        Spacer(modifier = Modifier.height(24.dp))
+        when {
+            agentState.isInstalling -> {
+                LinearProgressIndicator(
+                    progress = { agentState.progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = agentState.status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            agentState.isInstalled -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "$selectedAgent Installed",
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = installStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                isInstalled -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "OpenClaude Installed",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Ready to use with this device.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 }
-                else -> {
-                    Button(
-                        onClick = { viewModel.installOpenClaude() },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text(
-                            "Install OpenClaude",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Ready to use with this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            else -> {
+                Button(
+                    onClick = { viewModel.installAgent(selectedAgent) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
                     Text(
-                        text = "Downloads and installs OpenClaude CLI on this device",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Install $selectedAgent",
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Downloads and installs $selectedAgent on this device",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

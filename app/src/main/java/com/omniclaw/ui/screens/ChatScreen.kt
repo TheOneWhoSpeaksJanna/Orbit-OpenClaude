@@ -21,8 +21,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.domain.models.MessageRole
+import com.omniclaw.domain.models.DetailedModelInfo
+import com.omniclaw.ui.components.ModelBrowserSheet
 import com.omniclaw.ui.viewmodels.ChatViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,9 +44,13 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var showModelDropdown by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val detailedModels by viewModel.detailedModels.collectAsState()
+    val isFetchingModels by viewModel.isFetchingModels.collectAsState()
+    var showModelBrowser by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionId) {
         viewModel.loadModelsForCurrentProvider()
+        viewModel.fetchDetailedModels()
         if (sessionId.isNullOrEmpty()) {
             viewModel.startNewSession(null)
         } else {
@@ -72,7 +80,13 @@ fun ChatScreen(
                         if (availableModels.isNotEmpty()) {
                             Row(
                                 modifier = Modifier
-                                    .clickable { showModelDropdown = true },
+                                    .clickable {
+                                        if (detailedModels.isNotEmpty()) {
+                                            showModelBrowser = true
+                                        } else {
+                                            showModelDropdown = true
+                                        }
+                                    },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
@@ -86,18 +100,20 @@ fun ChatScreen(
                                     modifier = Modifier.size(14.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
-                                DropdownMenu(
-                                    expanded = showModelDropdown,
-                                    onDismissRequest = { showModelDropdown = false }
-                                ) {
-                                    availableModels.forEach { model ->
-                                        DropdownMenuItem(
-                                            text = { Text(model) },
-                                            onClick = {
-                                                viewModel.setSelectedModel(model)
-                                                showModelDropdown = false
-                                            }
-                                        )
+                                if (detailedModels.isEmpty()) {
+                                    DropdownMenu(
+                                        expanded = showModelDropdown,
+                                        onDismissRequest = { showModelDropdown = false }
+                                    ) {
+                                        availableModels.forEach { model ->
+                                            DropdownMenuItem(
+                                                text = { Text(model) },
+                                                onClick = {
+                                                    viewModel.setSelectedModel(model)
+                                                    showModelDropdown = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -212,6 +228,24 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+    }
+
+    if (showModelBrowser) {
+        Dialog(
+            onDismissRequest = { showModelBrowser = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            ModelBrowserSheet(
+                models = detailedModels,
+                selectedModelId = selectedModel,
+                isLoading = isFetchingModels,
+                onModelSelected = { modelId ->
+                    viewModel.setSelectedModel(modelId)
+                    showModelBrowser = false
+                },
+                onDismiss = { showModelBrowser = false }
+            )
         }
     }
 }
