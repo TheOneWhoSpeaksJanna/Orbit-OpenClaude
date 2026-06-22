@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.R
@@ -364,6 +365,7 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
     val apiKey by viewModel.apiKey.collectAsState()
     val isTesting by viewModel.isTestingConnection.collectAsState()
     val success by viewModel.testConnectionSuccess.collectAsState()
+    val testError by viewModel.testConnectionError.collectAsState()
     val providers = listOf("Claude", "OpenRouter", "OpenAI", "Gemini")
 
     Column(
@@ -460,6 +462,16 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
                 color = if (success == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium
             )
+            if (success == false && testError != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = testError ?: "",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

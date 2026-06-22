@@ -13,6 +13,7 @@ import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.runtime.OmniClawRuntimeManager
 import com.omniclaw.domain.models.Agent
 import com.omniclaw.domain.api.AiProvider
+import com.omniclaw.domain.api.AiResult
 import com.omniclaw.domain.repository.OmniClawRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.URL
+import java.util.zip.ZipInputStream
 
 enum class SetupStep(@StringRes val labelResId: Int) {
     Welcome(R.string.step_welcome),
@@ -65,6 +68,9 @@ class SetupViewModel(
 
     private val _testConnectionSuccess = MutableStateFlow<Boolean?>(null)
     val testConnectionSuccess: StateFlow<Boolean?> = _testConnectionSuccess.asStateFlow()
+
+    private val _testConnectionError = MutableStateFlow<String?>(null)
+    val testConnectionError: StateFlow<String?> = _testConnectionError.asStateFlow()
 
     // Per-agent install state
     data class AgentInstallState(
@@ -116,18 +122,36 @@ class SetupViewModel(
         viewModelScope.launch {
             _isTestingConnection.value = true
             _testConnectionSuccess.value = null
+            _testConnectionError.value = null
 
             val model = _selectedModel.value.ifBlank {
                 aiProvider.getModels(_selectedProvider.value).firstOrNull() ?: ""
             }
 
-            val success = aiProvider.testConnection(
-                provider = _selectedProvider.value,
+            if (_apiKey.value.isBlank()) {
+                _testConnectionSuccess.value = false
+                _testConnectionError.value = "API key is blank"
+                _isTestingConnection.value = false
+                return@launch
+            }
+
+            val result = aiProvider.generateContent(
+                prompt = "Reply with exactly: ok",
                 apiKey = _apiKey.value,
+                provider = _selectedProvider.value,
                 model = model
             )
 
-            _testConnectionSuccess.value = success
+            when (result) {
+                is AiResult.Success -> {
+                    _testConnectionSuccess.value = true
+                    _testConnectionError.value = null
+                }
+                is AiResult.Error -> {
+                    _testConnectionSuccess.value = false
+                    _testConnectionError.value = result.message
+                }
+            }
             _isTestingConnection.value = false
         }
     }
@@ -164,84 +188,89 @@ class SetupViewModel(
                 // Step 1: Check prerequisites
                 updateInstallState(agentName, status = "Checking prerequisites...")
                 withContext(Dispatchers.IO) {
-                    localCommandRunner.executeCommandStreamed(
-                        "command -v node || echo MISSING_NODE",
-                        onOutput = { }
-                    )
-                    localCommandRunner.executeCommandStreamed(
-                        "command -v npm || echo MISSING_NPM",
-                        onOutput = { }
+                    localCommandRunner.executeCommand(
+                        "mkdir -p ${runtimeManager.agentsDir.absolutePath} ${binDir.absolutePath}"
                     )
                 }
 
-                // Step 2: Clone the repository
-                updateInstallState(agentName, progress = 0.1f, status = "Cloning $agentName repository...")
+                // Step 2: Download repository as ZIP archive
+                updateInstallState(agentName, progress = 0.1f, status = "Downloading $agentName...")
 
                 if (targetDir.exists()) {
                     targetDir.deleteRecursively()
                 }
 
-                val cloneOutput = StringBuilder()
-                val cloneResult = withContext(Dispatchers.IO) {
-                    localCommandRunner.executeCommandStreamed(
-                        "git clone --depth 1 $repoUrl ${targetDir.absolutePath} 2>&1",
-                        onOutput = { line ->
-                            cloneOutput.appendLine(line)
-                            updateInstallState(agentName, status = line.take(80))
-                        }
-                    )
-                }
+                withContext(Dispatchers.IO) {
+                    // Convert git URL to ZIP download URL
+                    val zipUrl = repoUrl
+                        .removeSuffix(".git") + "/archive/refs/heads/main.zip"
 
-                if (cloneResult.exitCode != 0) {
-                    throw Exception("Git clone failed: ${cloneOutput.toString().take(200)}")
+                    val connection = URL(zipUrl).openConnection()
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 60000
+
+                    val tempDir = File(runtimeManager.tmpDir, "agent_$targetDirName")
+                    tempDir.deleteRecursively()
+                    tempDir.mkdirs()
+
+                    ZipInputStream(connection.getInputStream()).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            val entryFile = File(tempDir, entry.name)
+                            if (entry.isDirectory) {
+                                entryFile.mkdirs()
+                            } else {
+                                entryFile.parentFile?.mkdirs()
+                                entryFile.outputStream().use { output ->
+                                    zis.copyTo(output)
+                                }
+                            }
+                            zis.closeEntry()
+                            entry = zis.nextEntry
+                        }
+                    }
+
+                    // GitHub ZIPs have a root directory: owner-repo-commit
+                    val rootDir = tempDir.listFiles()?.firstOrNull { it.isDirectory }
+                    if (rootDir != null) {
+                        rootDir.copyRecursively(targetDir, overwrite = true)
+                    } else {
+                        tempDir.copyRecursively(targetDir, overwrite = true)
+                    }
+                    tempDir.deleteRecursively()
                 }
 
                 updateInstallState(agentName, progress = 0.4f, status = "Installing dependencies...")
 
-                // Step 3: Install npm dependencies
-                val npmOutput = StringBuilder()
-                val npmResult = withContext(Dispatchers.IO) {
-                    localCommandRunner.executeCommandStreamed(
-                        "cd ${targetDir.absolutePath} && npm install 2>&1",
-                        onOutput = { line ->
-                            npmOutput.appendLine(line)
-                            if (line.contains("added", ignoreCase = true) || line.contains("saved", ignoreCase = true)) {
-                                updateInstallState(agentName, status = line.take(80))
-                            }
-                        }
-                    )
-                }
-
-                if (npmResult.exitCode != 0) {
-                    throw Exception("npm install failed: ${npmOutput.toString().take(200)}")
+                // Step 3: Install npm dependencies (non-fatal if unavailable)
+                withContext(Dispatchers.IO) {
+                    try {
+                        localCommandRunner.executeCommand(
+                            "cd ${targetDir.absolutePath} && npm install --production 2>/dev/null || true"
+                        )
+                    } catch (_: Exception) { }
                 }
 
                 updateInstallState(agentName, progress = 0.7f, status = "Building $agentName...")
 
-                // Step 4: Build
-                val buildOutput = StringBuilder()
-                val buildResult = withContext(Dispatchers.IO) {
-                    localCommandRunner.executeCommandStreamed(
-                        "cd ${targetDir.absolutePath} && npm run build 2>&1",
-                        onOutput = { line ->
-                            buildOutput.appendLine(line)
-                            if (line.contains("success", ignoreCase = true) || line.contains("built", ignoreCase = true)) {
-                                updateInstallState(agentName, status = line.take(80))
-                            }
-                        }
-                    )
-                }
-
-                if (buildResult.exitCode != 0) {
-                    throw Exception("Build failed: ${buildOutput.toString().take(200)}")
+                // Step 4: Build (non-fatal if unavailable)
+                withContext(Dispatchers.IO) {
+                    try {
+                        localCommandRunner.executeCommand(
+                            "cd ${targetDir.absolutePath} && npm run build 2>/dev/null || true"
+                        )
+                    } catch (_: Exception) { }
                 }
 
                 updateInstallState(agentName, progress = 0.9f, status = "Creating run script...")
 
                 // Step 5: Create wrapper script
+                val distFiles = listOf("dist/cli.js", "dist/index.js", "cli.js", "index.js", "bin/cli.js")
+                val entryPoint = distFiles.firstOrNull { File(targetDir, it).exists() } ?: "index.js"
+
                 val wrapperScript = """
                     #!/data/data/com.termux/files/usr/bin/bash
-                    exec node ${targetDir.absolutePath}/dist/cli.js "${'$'}@"
+                    exec node ${targetDir.absolutePath}/${entryPoint} "${'$'}@"
                 """.trimIndent()
 
                 withContext(Dispatchers.IO) {

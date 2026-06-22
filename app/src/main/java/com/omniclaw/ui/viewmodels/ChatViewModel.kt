@@ -17,6 +17,8 @@ import com.omniclaw.domain.models.Message
 import com.omniclaw.domain.models.MessageRole
 import com.omniclaw.domain.models.TermuxLog
 import com.omniclaw.domain.repository.OmniClawRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -91,8 +93,11 @@ class ChatViewModel(
         }
     }
 
+    private var loadSessionJob: Job? = null
+
     fun loadSession(sessionId: String) {
-        viewModelScope.launch {
+        loadSessionJob?.cancel()
+        loadSessionJob = viewModelScope.launch {
             repository.getAllSessions().firstOrNull()?.find { it.id == sessionId }?.let {
                 _currentSession.value = it
             }

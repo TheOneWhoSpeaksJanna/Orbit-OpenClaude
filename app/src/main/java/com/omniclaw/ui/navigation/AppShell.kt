@@ -42,6 +42,7 @@ sealed class ChatViewState {
 @Composable
 fun AppShell() {
     var selectedTab by remember { mutableStateOf(BottomNavTab.HOME) }
+    var targetSessionId by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = OmniClawObsidianBase,
@@ -90,17 +91,29 @@ fun AppShell() {
             ) { tab ->
                 when (tab) {
                     BottomNavTab.HOME -> DashboardScreen(
-                        onNavigateToSession = { selectedTab = BottomNavTab.CHAT },
-                        onNavigateToNewSession = { selectedTab = BottomNavTab.CHAT },
+                        onNavigateToSession = { id ->
+                            targetSessionId = id
+                            selectedTab = BottomNavTab.CHAT
+                        },
+                        onNavigateToNewSession = {
+                            targetSessionId = null
+                            selectedTab = BottomNavTab.CHAT
+                        },
                         onNavigateToTermux = { },
                         onNavigateToSettings = { selectedTab = BottomNavTab.SETTINGS }
                     )
                     BottomNavTab.CHAT -> ChatScreen(
-                        sessionId = null,
-                        onNavigateBack = { }
+                        sessionId = targetSessionId,
+                        onNavigateBack = {
+                            targetSessionId = null
+                            selectedTab = BottomNavTab.HOME
+                        }
                     )
                     BottomNavTab.HISTORY -> HistoryScreen(
-                        onOpenSession = { _ -> selectedTab = BottomNavTab.CHAT }
+                        onOpenSession = { id ->
+                            targetSessionId = id
+                            selectedTab = BottomNavTab.CHAT
+                        }
                     )
                     BottomNavTab.SKILLS -> SkillsScreen()
                     BottomNavTab.PROVIDERS -> ProvidersScreen()
