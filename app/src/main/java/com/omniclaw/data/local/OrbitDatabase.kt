@@ -13,13 +13,9 @@ import com.omniclaw.data.local.entity.*
         AgentEntity::class,
         TermuxLogEntity::class
     ],
-    version = DATABASE_VERSION,
+    version = 2,
     exportSchema = false
 )
 abstract class OmniClawDatabase : RoomDatabase() {
     abstract fun dao(): OmniClawDao
-
-    companion object {
-        private const val DATABASE_VERSION = 2
-    }
 }
