@@ -2,6 +2,9 @@ package com.omniclaw.core.logging
 
 import android.content.Context
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.content.ContentValues
 import com.omniclaw.BuildConfig
 import java.io.File
 import java.io.FileWriter
@@ -21,13 +24,20 @@ object FileLogger {
     private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val executor = Executors.newSingleThreadExecutor()
 
+    private var appContext: Context? = null
     private var logDir: File? = null
     private var isInitialized = false
     private var originalExceptionHandler: Thread.UncaughtExceptionHandler? = null
 
     fun init(context: Context) {
         if (isInitialized) return
-        logDir = context.getExternalFilesDir(LOG_DIR)
+        appContext = context.applicationContext
+        val appCtx = appContext!!
+
+        logDir = appCtx.getExternalFilesDir(LOG_DIR)
+        if (logDir == null) {
+            logDir = File(appCtx.cacheDir, LOG_DIR)
+        }
         logDir?.let { dir ->
             if (!dir.exists()) dir.mkdirs()
             cleanOldLogs(dir)
@@ -41,7 +51,7 @@ object FileLogger {
     private fun installCrashHandler() {
         originalExceptionHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            logException("UNCAUGHT_CRASH", throwable, thread)
+            logCrashSync(throwable, thread)
             originalExceptionHandler?.uncaughtException(thread, throwable)
         }
     }
@@ -69,36 +79,59 @@ object FileLogger {
                 val file = File(dir, "app_${dateFormat.format(Date())}.log")
                 try {
                     FileWriter(file, true).use { it.append(line) }
-                } catch (_: Exception) {
-                    // best effort
-                }
+                } catch (_: Exception) { }
             }
         }
     }
 
-    private fun logException(level: String, throwable: Throwable, thread: Thread?) {
-        if (!isInitialized) return
+    private fun buildCrashReport(throwable: Throwable, thread: Thread?): String {
         val time = timeFormat.format(Date())
         val threadName = thread?.name ?: "unknown"
-        val tag = "CRASH"
-        val header = buildString {
-            append("$time | E | $threadName | $tag | === $level ===\n")
-            append("$time | E | $threadName | $tag | Device: ${Build.MANUFACTURER} ${Build.MODEL}\n")
-            append("$time | E | $threadName | $tag | Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})\n")
-            append("$time | E | $threadName | $tag | App: ${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE})\n")
-            append("$time | E | $threadName | $tag | ${throwable.javaClass.name}: ${throwable.message}\n")
+        return buildString {
+            append("$time | E | $threadName | CRASH | === UNCAUGHT_CRASH ===\n")
+            append("$time | E | $threadName | CRASH | Device: ${Build.MANUFACTURER} ${Build.MODEL}\n")
+            append("$time | E | $threadName | CRASH | Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})\n")
+            append("$time | E | $threadName | CRASH | App: ${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE})\n")
+            append("$time | E | $threadName | CRASH | ${throwable.javaClass.name}: ${throwable.message}\n")
             append(throwable.stackTraceToString().lines().joinToString("\n") { line ->
-                "$time | E | $threadName | $tag |   $line"
+                "$time | E | $threadName | CRASH |   $line"
             })
             append("\n")
         }
-        val crashFile = File(logDir, "crash_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.log")
-        executor.execute {
+    }
+
+    private fun logCrashSync(throwable: Throwable, thread: Thread?) {
+        if (!isInitialized) return
+        val header = buildCrashReport(throwable, thread)
+        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val crashFileName = "crash_$ts.log"
+
+        // Write to private log dir (cache or externalFiles)
+        logDir?.let { dir ->
             try {
-                FileWriter(crashFile, false).use { it.append(header) }
-                val mainFile = File(logDir, "app_${dateFormat.format(Date())}.log")
-                FileWriter(mainFile, true).use { it.append(header) }
-                cleanCrashLogs(logDir!!)
+                FileWriter(File(dir, crashFileName), false).use { it.append(header) }
+                FileWriter(File(dir, "app_${dateFormat.format(Date())}.log"), true).use { it.append(header) }
+                cleanCrashLogs(dir)
+            } catch (_: Exception) { }
+        }
+
+        // Also write to public Downloads folder via MediaStore (API 29+)
+        val ctx = appContext ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, crashFileName)
+                    put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/OrbitCrashLogs")
+                    put(MediaStore.Downloads.IS_PENDING, 0)
+                }
+                val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    ctx.contentResolver.openOutputStream(it)?.use { outputStream ->
+                        outputStream.write(header.toByteArray())
+                        outputStream.flush()
+                    }
+                }
             } catch (_: Exception) { }
         }
     }
