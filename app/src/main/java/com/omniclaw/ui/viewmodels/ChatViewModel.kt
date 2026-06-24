@@ -356,11 +356,12 @@ class ChatViewModel(
                     )
                     repository.insertMessage(actionModelMsg)
 
-                    val (cmd, isSudo) = when {
+                    val pair = when {
                         runMatch != null -> runMatch.groupValues[1] to false
                         sudoMatch != null -> sudoMatch.groupValues[1] to true
-                        else -> null to false
+                        else -> null
                     } ?: continue
+                    val (cmd, isSudo) = pair
 
                     if (isCommandAllowed(cmd, isSudo)) {
                         executeCommandAndContinue(cmd, isSudo)
