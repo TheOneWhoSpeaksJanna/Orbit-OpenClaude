@@ -35,6 +35,8 @@ private const val DEFAULT_PROVIDER = "Gemini"
 private const val AGENT_HERMES = "Hermes"
 private const val AGENT_OPENCLAUDE = "OpenClaude"
 private const val AGENT_CLAUDE_CODE = "Claude Code"
+private const val AGENT_OPENCODE = "OpenCode"
+private const val AGENT_CODEX = "Codex"
 private const val GITHUB_REPO_URL = "https://github.com/Gitlawb/openclaude.git"
 private const val CONNECT_TIMEOUT_MS = 15000
 private const val READ_TIMEOUT_MS = 60000
@@ -139,11 +141,14 @@ When the user asks you to control the phone:
 private val AGENT_INSTALL_DIRS = mapOf(
     AGENT_HERMES to "hermes",
     AGENT_OPENCLAUDE to "openclaude",
-    AGENT_CLAUDE_CODE to "claude_code"
+    AGENT_CLAUDE_CODE to "claude-code",
+    AGENT_OPENCODE to "opencode",
+    AGENT_CODEX to "codex"
 )
 
 private val AGENT_WRAPPER_NAMES = mapOf(
-    AGENT_CLAUDE_CODE to "claude-code"
+    AGENT_CLAUDE_CODE to "claude-code",
+    AGENT_OPENCODE to "lildax"
 )
 
 private val SYSTEM_PROMPTS = mapOf(
@@ -177,7 +182,9 @@ RULES:
 - For phone control tasks, prefer [SUDO: ...] since they need system privileges
 - If you just want to talk, respond normally""",
     AGENT_OPENCLAUDE to "You are OpenClaude, an open-source Claude integration with full tool use.",
-    AGENT_CLAUDE_CODE to "You are Claude Code, a specialized coding agent with codebase awareness."
+    AGENT_CLAUDE_CODE to "You are Claude Code, a specialized coding agent with codebase awareness.",
+    AGENT_OPENCODE to "You are OpenCode, an open-source coding agent specialized in automated code generation and local execution.",
+    AGENT_CODEX to "You are Codex, an AI coding agent powered by OpenAI with strong instruction-following capabilities."
 )
 
 enum class SetupStep(@StringRes val labelResId: Int) {
@@ -238,7 +245,9 @@ class SetupViewModel(
         mapOf(
             AGENT_HERMES to AgentInstallState(),
             AGENT_OPENCLAUDE to AgentInstallState(),
-            AGENT_CLAUDE_CODE to AgentInstallState()
+            AGENT_CLAUDE_CODE to AgentInstallState(),
+            AGENT_OPENCODE to AgentInstallState(),
+            AGENT_CODEX to AgentInstallState()
         )
     )
     val agentInstallStates: StateFlow<Map<String, AgentInstallState>> = _agentInstallStates.asStateFlow()
@@ -313,9 +322,11 @@ class SetupViewModel(
     fun installOpenClaude() = installAgent(AGENT_OPENCLAUDE)
     fun installHermes() = installAgent(AGENT_HERMES)
     fun installClaudeCode() = installAgent(AGENT_CLAUDE_CODE)
+    fun installOpenCode() = installAgent(AGENT_OPENCODE)
+    fun installCodex() = installAgent(AGENT_CODEX)
 
     fun installAgent(agentName: String) {
-        val targetDirName = AGENT_INSTALL_DIRS[agentName] ?: agentName.lowercase().replace(" ", "_")
+        val targetDirName = AGENT_INSTALL_DIRS[agentName] ?: agentName.lowercase().replace(" ", "-")
         val targetDir = File(runtimeManager.agentsDir, targetDirName)
         val binDir = runtimeManager.binDir
         val wrapperName = AGENT_WRAPPER_NAMES[agentName] ?: agentName.lowercase()
@@ -515,7 +526,7 @@ class SetupViewModel(
             val sysPrompt = SYSTEM_PROMPTS[agentName] ?: "You are an expert AI assistant."
 
             val agent = Agent(
-                id = agentName.lowercase().replace(" ", "_"),
+                id = agentName.lowercase().replace(" ", "-"),
                 name = agentName,
                 description = AGENT_DESC,
                 systemPrompt = sysPrompt

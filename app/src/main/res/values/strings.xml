@@ -81,6 +81,8 @@
     <string name="agent_hermes">General purpose logic and local orchestration.</string>
     <string name="agent_openclaude">Open-source Claude integration with full tool use.</string>
     <string name="agent_claude_code">Specialized coding agent with codebase awareness.</string>
+    <string name="agent_opencode">Open-source coding agent for automated code generation.</string>
+    <string name="agent_codex">OpenAI-powered coding agent with strong instruction-following.</string>
     <string name="agent_default">Expert context handling.</string>
 
     <!-- TermuxScreen -->

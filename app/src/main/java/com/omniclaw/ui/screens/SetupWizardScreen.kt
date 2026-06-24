@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
 
 private val THEME_OPTIONS = listOf("System", "Dark", "Light")
-private val AGENT_OPTIONS = listOf("Hermes", "OpenClaude", "Claude Code")
+private val AGENT_OPTIONS = listOf("Hermes", "OpenClaude", "Claude Code", "OpenCode", "Codex")
 private val PROVIDER_OPTIONS = listOf("Claude", "OpenRouter", "OpenAI", "Gemini")
 
 private const val AGENT_INSTALLED_FORMAT = "%s Installed"
@@ -286,6 +286,8 @@ fun AgentSelectionStep(viewModel: SetupViewModel) {
                         "Hermes" -> stringResource(R.string.agent_hermes)
                         "OpenClaude" -> stringResource(R.string.agent_openclaude)
                         "Claude Code" -> stringResource(R.string.agent_claude_code)
+                        "OpenCode" -> stringResource(R.string.agent_opencode)
+                        "Codex" -> stringResource(R.string.agent_codex)
                         else -> stringResource(R.string.agent_default)
                     }
                     Text(

@@ -5,7 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class OmniClawRuntimeManager(private val context: Context) {
+class OmniClawRuntimeManager(val context: Context) {
     val runtimeDir = File(context.filesDir, "orbit_runtime")
     val binDir = File(runtimeDir, "bin")
     val tmpDir = File(runtimeDir, "tmp")

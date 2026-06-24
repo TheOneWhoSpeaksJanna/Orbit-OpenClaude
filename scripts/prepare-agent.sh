@@ -92,7 +92,7 @@ fi
 # Install production dependencies
 echo "==> Installing production dependencies..."
 cd "$AGENT_DIR"
-npm install --production --ignore-scripts 2>&1 | tail -5 || echo "    (npm install completed with warnings)"
+npm install --production 2>&1 | tail -10 || echo "    (npm install completed with warnings)"
 cd "$WORK_DIR"
 
 # Remove non-essential files to reduce size
