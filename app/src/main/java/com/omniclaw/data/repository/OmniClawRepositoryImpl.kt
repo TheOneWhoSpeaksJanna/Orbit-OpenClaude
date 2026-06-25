@@ -35,6 +35,10 @@ class OmniClawRepositoryImpl(
         dao.insertMessage(message.toEntity())
     }
 
+    override suspend fun deleteEmptySessions() {
+        dao.deleteEmptySessions()
+    }
+
     override fun getAllAgents(): Flow<List<Agent>> =
         dao.getAllAgents().map { list -> list.map { it.toAgent() } }
 

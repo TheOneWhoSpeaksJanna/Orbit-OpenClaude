@@ -28,6 +28,9 @@ interface OmniClawDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: MessageEntity)
 
+    @Query("DELETE FROM sessions WHERE title = 'New Session' AND id NOT IN (SELECT DISTINCT sessionId FROM messages)")
+    suspend fun deleteEmptySessions()
+
     @Query("SELECT * FROM agents ORDER BY name ASC")
     fun getAllAgents(): Flow<List<AgentEntity>>
 

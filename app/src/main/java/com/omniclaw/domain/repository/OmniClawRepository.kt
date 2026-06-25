@@ -14,6 +14,8 @@ interface OmniClawRepository {
     fun getMessagesForSession(sessionId: String): Flow<List<Message>>
     suspend fun insertMessage(message: Message)
 
+    suspend fun deleteEmptySessions()
+
     fun getAllAgents(): Flow<List<Agent>>
     suspend fun insertAgent(agent: Agent)
 

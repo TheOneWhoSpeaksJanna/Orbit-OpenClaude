@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.prefs.PreferencesManager
+import com.omniclaw.data.local.runtime.PackageInstaller
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
 import com.omniclaw.domain.models.ChatSession
@@ -44,7 +45,8 @@ class ChatViewModel(
     private val aiProvider: AiProvider,
     private val localCommandRunner: LocalCommandRunner,
     private val prefsManager: PreferencesManager,
-    private val openCodeRepository: OpenCodeRepository
+    private val openCodeRepository: OpenCodeRepository,
+    private val packageInstaller: PackageInstaller
 ) : ViewModel() {
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
@@ -267,6 +269,14 @@ class ChatViewModel(
                     }
                 }
 
+                // Ensure Node.js is available — agents run via a node-based wrapper script
+                try {
+                    val nodeCheck = localCommandRunner.executeCommand("command -v node")
+                    if (nodeCheck.exitCode != 0 || nodeCheck.output.isBlank()) {
+                        packageInstaller.installPackage("nodejs") { _, _ -> }
+                    }
+                } catch (_: Exception) { /* best effort, let the command fail naturally */ }
+
                 try {
                     val escaped = content.replace("\"", "\\\"")
                     val result = localCommandRunner.executeCommand("echo \"$escaped\" | $runCmd")
@@ -442,7 +452,8 @@ class ChatViewModel(
                     application.container.aiProvider,
                     application.container.localCommandRunner,
                     application.container.prefsManager,
-                    application.container.openCodeRepository
+                    application.container.openCodeRepository,
+                    application.container.packageInstaller
                 ) as T
             }
         }

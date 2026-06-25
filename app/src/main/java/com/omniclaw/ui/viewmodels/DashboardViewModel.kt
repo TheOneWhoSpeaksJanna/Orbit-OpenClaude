@@ -30,6 +30,14 @@ class DashboardViewModel(
     private val appContainer: AppContainer
 ) : ViewModel() {
 
+    init {
+        // Clean up empty sessions left behind when users navigate away
+        // without sending a message (e.g. tapping New Session then going back)
+        viewModelScope.launch {
+            repository.deleteEmptySessions()
+        }
+    }
+
     val projects: StateFlow<List<Project>> = repository.getAllProjects()
         .stateIn(
             scope = viewModelScope,
@@ -40,7 +48,7 @@ class DashboardViewModel(
     val sessions: StateFlow<List<ChatSession>> = repository.getAllSessions()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.WhileSubscribed(1000),
             initialValue = emptyList()
         )
 

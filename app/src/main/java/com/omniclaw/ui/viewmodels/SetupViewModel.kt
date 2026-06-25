@@ -13,6 +13,7 @@ import com.omniclaw.core.config.FlavorConfig
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.runtime.OmniClawRuntimeManager
+import com.omniclaw.data.local.runtime.PackageInstaller
 import com.omniclaw.domain.models.Agent
 import com.omniclaw.domain.models.Skill
 import com.omniclaw.domain.api.AiProvider
@@ -203,7 +204,8 @@ class SetupViewModel(
     private val repository: OmniClawRepository,
     private val aiProvider: AiProvider,
     private val localCommandRunner: LocalCommandRunner,
-    private val runtimeManager: OmniClawRuntimeManager
+    private val runtimeManager: OmniClawRuntimeManager,
+    private val packageInstaller: PackageInstaller
 ) : ViewModel() {
 
     private val _currentStep = MutableStateFlow(0)
@@ -371,6 +373,9 @@ class SetupViewModel(
                     )
                 }
 
+                // Ensure Node.js is available — agents need it for npm install/build and wrapper script
+                ensureNodeJs()
+
                 // Try extracting from bundled assets first, fall back to GitHub download
                 val installedFromAssets = withContext(Dispatchers.IO) {
                     tryInstallFromAssets(agentName, targetDir, binDir, wrapperName, wrapperFile)
@@ -536,24 +541,29 @@ class SetupViewModel(
     }
 
     /**
+     * Ensure Node.js is installed. Agents use it for npm install, build, and
+     * the wrapper script. Skips if already available.
+     */
+    private suspend fun ensureNodeJs() {
+        try {
+            val check = localCommandRunner.executeCommand("command -v node")
+            if (check.exitCode != 0 || check.output.isBlank()) {
+                packageInstaller.installPackage("nodejs") { _, _ -> }
+            }
+        } catch (_: Exception) { /* best effort */ }
+    }
+
+    /**
      * Mark a file as executable. [File.setExecutable] can silently fail on
      * some Android versions due to SELinux policies, so we fall back to
      * shell-level chmod +x if the Java API doesn't stick.
      */
-    private fun makeExecutable(file: File) {
+    private suspend fun makeExecutable(file: File) {
         file.setExecutable(true)
         if (!file.canExecute()) {
             try {
-                // Direct BusyBox invocation bypasses shell wrapper PATH issues
-                // and is more reliable than system chmod on SELinux-restricted devices.
-                val busybox = File(runtimeManager.binDir, "busybox")
-                if (busybox.exists()) {
-                    Runtime.getRuntime().exec(arrayOf(
-                        busybox.absolutePath, "chmod", "+x", file.absolutePath
-                    )).waitFor()
-                } else {
-                    Runtime.getRuntime().exec(arrayOf("sh", "-c", "chmod +x " + file.absolutePath)).waitFor()
-                }
+                // LocalCommandRunner handles shell PATH resolution and SELinux
+                localCommandRunner.executeCommand("chmod +x " + file.absolutePath)
             } catch (_: Exception) { /* best effort */ }
         }
     }
@@ -615,7 +625,8 @@ class SetupViewModel(
                     application.container.repository,
                     application.container.aiProvider,
                     application.container.localCommandRunner,
-                    application.container.runtimeManager
+                    application.container.runtimeManager,
+                    application.container.packageInstaller
                 ) as T
             }
         }
