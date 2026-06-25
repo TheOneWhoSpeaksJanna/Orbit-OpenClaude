@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # prepare-agent.sh - Pre-download and bundle an agent for APK inclusion
 # Usage: ./scripts/prepare-agent.sh <flavor>
 # Flavors: opencode, openclaude, claudecode, codex
