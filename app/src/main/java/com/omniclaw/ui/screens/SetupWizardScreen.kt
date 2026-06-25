@@ -51,7 +51,12 @@ fun SetupWizardScreen(
     viewModel: SetupViewModel = viewModel(factory = SetupViewModel.Factory)
 ) {
     val currentStep by viewModel.currentStep.collectAsState()
-    val currentStepDef = SetupStep.entries[currentStep]
+    val hasFlavorPreset by viewModel.hasFlavorPreset.collectAsState()
+    val filteredSteps = remember(hasFlavorPreset) {
+        if (hasFlavorPreset) SetupStep.entries.filter { it != SetupStep.Agent }
+        else SetupStep.entries
+    }
+    val currentStepDef = filteredSteps.getOrNull(currentStep) ?: SetupStep.Welcome
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -61,7 +66,7 @@ fun SetupWizardScreen(
                 title = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = stringResource(R.string.step_n_of_m, currentStep + 1, SetupStep.entries.size),
+                            text = stringResource(R.string.step_n_of_m, currentStep + 1, filteredSteps.size),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -89,7 +94,7 @@ fun SetupWizardScreen(
                     }
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                if (currentStep < SetupStep.entries.lastIndex) {
+                if (currentStep < filteredSteps.lastIndex) {
                     Button(
                         onClick = { viewModel.nextStep() },
                         enabled = viewModel.canAdvance
@@ -129,18 +134,20 @@ fun SetupWizardScreen(
                     },
                     label = "SetupWizardTransition"
                 ) { step ->
-                    when (step) {
-                        0 -> WelcomeStep()
-                        1 -> ThemeSelectionStep(viewModel)
-                        2 -> AgentSelectionStep(viewModel)
-                        3 -> ProviderSelectionStep(viewModel)
-                        4 -> ShizukuStep(viewModel)
-                        5 -> SummaryStep()
+                    val stepDef = if (hasFlavorPreset) SetupStep.entries.filter { it != SetupStep.Agent }.getOrNull(step) else SetupStep.entries.getOrNull(step)
+                    when (stepDef) {
+                        SetupStep.Welcome -> WelcomeStep()
+                        SetupStep.Theme -> ThemeSelectionStep(viewModel)
+                        SetupStep.Agent -> AgentSelectionStep(viewModel)
+                        SetupStep.Provider -> ProviderSelectionStep(viewModel)
+                        SetupStep.Shizuku -> ShizukuStep(viewModel)
+                        SetupStep.Summary -> SummaryStep()
+                        null -> Unit
                     }
                 }
             }
             GlassPageIndicator(
-                totalSteps = SetupStep.entries.size,
+                totalSteps = filteredSteps.size,
                 currentStep = currentStep
             )
         }

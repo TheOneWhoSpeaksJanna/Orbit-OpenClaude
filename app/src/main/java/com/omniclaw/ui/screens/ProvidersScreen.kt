@@ -18,23 +18,38 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.ui.components.BrandIcons
@@ -56,12 +71,21 @@ import com.omniclaw.ui.theme.OmniClawWarning
 private const val TITLE = "API Providers"
 private const val SUBTITLE = "Verify connectivity and manage endpoint configurations"
 private const val NO_API_KEY_LABEL = "No API key configured"
+private const val API_KEY_SET_LABEL = "API key set"
 private const val CD_VERIFY = "Verify"
 private const val CD_TESTING = "Testing"
+private const val CD_EDIT = "Edit Key"
 private const val STATUS_NOT_VERIFIED = "Not verified"
 private const val STATUS_VERIFYING = "Verifying connection..."
 private const val STATUS_CONNECTED = "Connected"
 private const val STATUS_OFFLINE = "Offline / No connection"
+
+private const val KEY_DIALOG_TITLE = "API Key"
+private const val KEY_DIALOG_LABEL = "Paste your API key here"
+private const val KEY_DIALOG_SAVE = "Save"
+private const val KEY_DIALOG_DELETE = "Delete Key"
+private const val KEY_DIALOG_CANCEL = "Cancel"
+private const val KEY_DELETE_CONFIRM = "Remove this API key?"
 
 private val ERROR_RED = Color(0xFFEF4444)
 
@@ -90,6 +114,9 @@ fun ProvidersScreen(
     viewModel: ProvidersViewModel = viewModel(factory = ProvidersViewModel.Factory)
 ) {
     val providers by viewModel.providers.collectAsState()
+    val editingProvider by viewModel.editingProvider.collectAsState()
+    val editApiKeyValue by viewModel.editApiKeyValue.collectAsState()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -117,7 +144,117 @@ fun ProvidersScreen(
         items(providers, key = { it.name }) { provider ->
             ProviderHealthCard(
                 provider = provider,
-                onVerify = { viewModel.verifyConnection(provider.name) }
+                onVerify = { viewModel.verifyConnection(provider.name) },
+                onEditKey = { viewModel.startEditApiKey(provider.name) }
+            )
+        }
+    }
+
+    // API Key Edit Dialog
+    if (editingProvider != null) {
+        var showKey by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelEditApiKey() },
+            containerColor = OmniClawObsidianSurface,
+            titleContentColor = OmniClawTextPrimary,
+            textContentColor = OmniClawTextSecondary,
+            title = {
+                Text(
+                    text = "$KEY_DIALOG_TITLE: $editingProvider",
+                    color = OmniClawTextPrimary
+                )
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editApiKeyValue,
+                        onValueChange = { viewModel.updateEditApiKey(it) },
+                        label = { Text(KEY_DIALOG_LABEL) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showKey) VisualTransformation.None
+                            else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showKey = !showKey }) {
+                                Icon(
+                                    imageVector = if (showKey) Icons.Default.VisibilityOff
+                                        else Icons.Default.Visibility,
+                                    contentDescription = if (showKey) "Hide key" else "Show key"
+                                )
+                            }
+                        }
+                    )
+                    if (editApiKeyValue.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { showDeleteConfirm = true },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = ERROR_RED
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(KEY_DIALOG_DELETE)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.saveApiKey() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = OmniClawAccent,
+                        contentColor = OmniClawObsidianBase
+                    )
+                ) {
+                    Text(KEY_DIALOG_SAVE)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelEditApiKey() }) {
+                    Text(KEY_DIALOG_CANCEL, color = OmniClawTextSecondary)
+                }
+            }
+        )
+
+        // Delete confirmation dialog
+        if (showDeleteConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                containerColor = OmniClawObsidianSurface,
+                titleContentColor = OmniClawTextPrimary,
+                textContentColor = OmniClawTextSecondary,
+                title = {
+                    Text(KEY_DELETE_CONFIRM, color = OmniClawTextPrimary)
+                },
+                text = {
+                    Text("This will remove the saved API key for $editingProvider.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirm = false
+                            viewModel.removeApiKey()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ERROR_RED
+                        )
+                    ) {
+                        Text("Remove")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirm = false }) {
+                        Text(KEY_DIALOG_CANCEL, color = OmniClawTextSecondary)
+                    }
+                }
             )
         }
     }
@@ -126,7 +263,8 @@ fun ProvidersScreen(
 @Composable
 private fun ProviderHealthCard(
     provider: ProviderConfig,
-    onVerify: () -> Unit
+    onVerify: () -> Unit,
+    onEditKey: () -> Unit
 ) {
     val shape = remember { RoundedCornerShape(14.dp) }
 
@@ -184,16 +322,28 @@ private fun ProviderHealthCard(
                         color = OmniClawTextSecondary
                     )
                 }
-                if (!provider.apiKeyConfigured) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = NO_API_KEY_LABEL,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = OmniClawWarning
-                    )
-                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (provider.apiKeyConfigured) API_KEY_SET_LABEL else NO_API_KEY_LABEL,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (provider.apiKeyConfigured) OmniClawSuccess else OmniClawWarning
+                )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            // Edit key button
+            IconButton(
+                onClick = onEditKey,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = CD_EDIT,
+                    tint = OmniClawTextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            // Verify button
             Button(
                 onClick = onVerify,
                 enabled = !isVerifying,

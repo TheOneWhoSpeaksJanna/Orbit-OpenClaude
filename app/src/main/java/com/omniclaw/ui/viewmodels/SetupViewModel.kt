@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.BuildConfig
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.R
+import com.omniclaw.core.config.FlavorConfig
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.runtime.OmniClawRuntimeManager
@@ -213,8 +214,18 @@ class SetupViewModel(
     private val _shizukuEnabled = MutableStateFlow(false)
     val shizukuEnabled: StateFlow<Boolean> = _shizukuEnabled.asStateFlow()
 
-    private val _selectedAgent = MutableStateFlow(DEFAULT_AGENT)
+    private val _selectedAgent = MutableStateFlow(
+        if (FlavorConfig.presetAgentName.isNotBlank()) FlavorConfig.presetAgentName
+        else DEFAULT_AGENT
+    )
     val selectedAgent: StateFlow<String> = _selectedAgent.asStateFlow()
+
+    private val _hasFlavorPreset = MutableStateFlow(FlavorConfig.presetAgentName.isNotBlank())
+    val hasFlavorPreset: StateFlow<Boolean> = _hasFlavorPreset.asStateFlow()
+
+    val filteredSteps: List<SetupStep>
+        get() = if (_hasFlavorPreset.value) SetupStep.entries.filter { it != SetupStep.Agent }
+        else SetupStep.entries
 
     private val _selectedProvider = MutableStateFlow(DEFAULT_PROVIDER)
     val selectedProvider: StateFlow<String> = _selectedProvider.asStateFlow()
@@ -254,7 +265,7 @@ class SetupViewModel(
 
     val canAdvance: Boolean
         get() {
-            val step = SetupStep.entries[_currentStep.value]
+            val step = filteredSteps.getOrNull(_currentStep.value) ?: return false
             return when (step) {
                 SetupStep.Welcome -> true
                 SetupStep.Theme -> _theme.value.isNotBlank()
@@ -524,18 +535,19 @@ class SetupViewModel(
 
             val agentName = _selectedAgent.value
             val sysPrompt = SYSTEM_PROMPTS[agentName] ?: "You are an expert AI assistant."
+            val wrapperName = AGENT_WRAPPER_NAMES[agentName] ?: agentName.lowercase()
 
             val agent = Agent(
                 id = agentName.lowercase().replace(" ", "-"),
                 name = agentName,
                 description = AGENT_DESC,
-                systemPrompt = sysPrompt
+                systemPrompt = sysPrompt,
+                runCommand = File(runtimeManager.binDir, wrapperName).absolutePath
             )
             repository.insertAgent(agent)
 
             // Auto-install pre-bundled agent for this flavor
-            val presetAgentId = BuildConfig.FLAVOR_PRESET_AGENT_ID
-            if (presetAgentId.isNotBlank() && agent.id == presetAgentId) {
+            if (FlavorConfig.presetAgentName.isNotBlank() && agentName == FlavorConfig.presetAgentName) {
                 installAgent(agentName)
             }
 

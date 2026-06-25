@@ -158,4 +158,8 @@ class PreferencesManager(private val context: Context) {
             else -> setGeminiApiKey(key)
         }
     }
+
+    suspend fun removeApiKeyForProvider(provider: String) {
+        setApiKeyForProvider(provider, "")
+    }
 }

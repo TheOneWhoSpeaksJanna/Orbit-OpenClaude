@@ -58,6 +58,12 @@ class ProvidersViewModel(
     )
     val providers: StateFlow<List<ProviderConfig>> = _providers.asStateFlow()
 
+    private val _editingProvider = MutableStateFlow<String?>(null)
+    val editingProvider: StateFlow<String?> = _editingProvider.asStateFlow()
+
+    private val _editApiKeyValue = MutableStateFlow("")
+    val editApiKeyValue: StateFlow<String> = _editApiKeyValue.asStateFlow()
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -106,6 +112,43 @@ class ProvidersViewModel(
 
             updateProviderState(providerName, result)
         }
+    }
+
+    fun startEditApiKey(providerName: String) {
+        viewModelScope.launch {
+            val currentKey = prefsManager.getApiKeyForProvider(providerName).firstOrNull() ?: ""
+            _editApiKeyValue.value = currentKey
+            _editingProvider.value = providerName
+        }
+    }
+
+    fun saveApiKey() {
+        val provider = _editingProvider.value ?: return
+        viewModelScope.launch {
+            prefsManager.setApiKeyForProvider(provider, _editApiKeyValue.value)
+            _editingProvider.value = null
+            _editApiKeyValue.value = ""
+            loadApiKeyStatus()
+        }
+    }
+
+    fun removeApiKey() {
+        val provider = _editingProvider.value ?: return
+        viewModelScope.launch {
+            prefsManager.removeApiKeyForProvider(provider)
+            _editingProvider.value = null
+            _editApiKeyValue.value = ""
+            loadApiKeyStatus()
+        }
+    }
+
+    fun cancelEditApiKey() {
+        _editingProvider.value = null
+        _editApiKeyValue.value = ""
+    }
+
+    fun updateEditApiKey(value: String) {
+        _editApiKeyValue.value = value
     }
 
     private suspend fun performHealthCheck(name: String, apiKey: String): ConnectionState {
