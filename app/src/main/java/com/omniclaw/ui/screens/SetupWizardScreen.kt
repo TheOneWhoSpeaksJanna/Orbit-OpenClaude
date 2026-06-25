@@ -37,6 +37,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import rikka.shizuku.Shizuku
 
 private val THEME_OPTIONS = listOf("System", "Dark", "Light")
 private val AGENT_OPTIONS = listOf("OpenClaude", "Claude Code", "OpenCode", "Codex", "Default")
