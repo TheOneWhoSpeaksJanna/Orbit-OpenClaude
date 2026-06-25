@@ -437,7 +437,7 @@ class SetupViewModel(
                     val entryPoint = DIST_CANDIDATES.firstOrNull { File(targetDir, it).exists() } ?: "index.js"
 
                     val wrapperScript = """
-                        #!/data/data/com.termux/files/usr/bin/bash
+                        #!/system/bin/sh
                         exec node ${targetDir.absolutePath}/${entryPoint} "${'$'}@"
                     """.trimIndent()
 
