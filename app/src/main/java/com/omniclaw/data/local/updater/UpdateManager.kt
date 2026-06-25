@@ -133,6 +133,7 @@ class UpdateManager(
                 if (resumeBytes > 0) {
                     requestBuilder.header("Range", "bytes=$resumeBytes-")
                 }
+                requestBuilder.header("Accept", "application/octet-stream")
                 val token = githubToken()
                 if (!token.isNullOrBlank()) {
                     requestBuilder.header("Authorization", "Bearer $token")
@@ -148,7 +149,10 @@ class UpdateManager(
                         partialFile.delete()
                         prefsManager.clearDownloadProgress()
                         val retry = httpClient.newCall(
-                            Request.Builder().url(info.downloadUrl).build()
+                            Request.Builder().url(info.downloadUrl)
+                                .header("Accept", "application/octet-stream")
+                                .header("Authorization", "Bearer $token")
+                                .build()
                         ).execute()
                         if (!retry.isSuccessful) {
                             throw Exception("${DOWNLOAD_FAILED_PREFIX}${retry.code}")
@@ -279,8 +283,8 @@ class UpdateManager(
                 val asset = assets.getJSONObject(i)
                 val name = asset.optString("name", "")
                 if (name.endsWith(".apk") && name.contains(currentFlavor)) {
-                    downloadUrl = asset.optString("browser_download_url", "")
                     assetId = asset.optLong("id", 0)
+                    downloadUrl = buildApiDownloadUrl(assetId)
                     break
                 }
             }
@@ -289,8 +293,8 @@ class UpdateManager(
                     val asset = assets.getJSONObject(i)
                     val name = asset.optString("name", "")
                     if (name.endsWith(".apk")) {
-                        downloadUrl = asset.optString("browser_download_url", "")
                         assetId = asset.optLong("id", 0)
+                        downloadUrl = buildApiDownloadUrl(assetId)
                         break
                     }
                 }
@@ -313,6 +317,10 @@ class UpdateManager(
         private const val REPO_OWNER = "TheOneWhoSpeaksJanna"
         private const val REPO_NAME = "Orbit-AI"
         private val API_BASE_URL = "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME"
+
+        private fun buildApiDownloadUrl(assetId: Long): String {
+            return "$API_BASE_URL/releases/assets/$assetId"
+        }
 
         private const val CONNECT_TIMEOUT_SECONDS = 15L
         private const val READ_TIMEOUT_SECONDS = 30L
