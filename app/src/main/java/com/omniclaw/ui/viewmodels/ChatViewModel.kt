@@ -17,6 +17,7 @@ import com.omniclaw.domain.models.MessageRole
 import com.omniclaw.domain.models.TermuxLog
 import com.omniclaw.domain.repository.OmniClawRepository
 import com.omniclaw.domain.models.AgentPermissionLevel
+import com.omniclaw.domain.repository.OpenCodeRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,7 +31,6 @@ import java.util.UUID
 
 private const val DEFAULT_PROVIDER = "Gemini"
 private const val NEW_SESSION_TITLE = "New Session"
-private const val NO_AGENT_CMD_ERROR = "Error: Selected agent has no run command configured."
 private const val DEFAULT_SYSTEM_PROMPT = "System: You are an expert AI assistant."
 private const val NO_OUTPUT = "(no output)"
 private const val ERROR_RUNNING_AGENT = "Error running agent: "
@@ -42,7 +42,8 @@ class ChatViewModel(
     private val repository: OmniClawRepository,
     private val aiProvider: AiProvider,
     private val localCommandRunner: LocalCommandRunner,
-    private val prefsManager: PreferencesManager
+    private val prefsManager: PreferencesManager,
+    private val openCodeRepository: OpenCodeRepository
 ) : ViewModel() {
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
@@ -231,26 +232,25 @@ class ChatViewModel(
             val activeProvider = prefsManager.selectedProvider.firstOrNull() ?: DEFAULT_PROVIDER
             val activeModelName = prefsManager.selectedModel.firstOrNull() ?: ""
             val activeAgentId = prefsManager.selectedAgent.firstOrNull()
-                ?.lowercase()?.replace(" ", "_")
+                ?.lowercase()?.replace(" ", "-")
                 ?: return@launch
 
             _isLoading.value = true
 
             if (_useLocalMode.value) {
+                var runCmd: String? = null
                 val agentEntity = repository.getAllAgents().firstOrNull()?.find { it.id == activeAgentId }
-                val runCmd = agentEntity?.runCommand
+                runCmd = agentEntity?.runCommand
+
                 if (runCmd.isNullOrBlank()) {
-                    val errMsg = Message(
-                        id = UUID.randomUUID().toString(),
-                        sessionId = session.id,
-                        role = MessageRole.MODEL,
-                        content = NO_AGENT_CMD_ERROR,
-                        timestamp = System.currentTimeMillis()
-                    )
-                    repository.insertMessage(errMsg)
-                    _isLoading.value = false
-                    return@launch
+                    val catalogAgent = openCodeRepository.getAgentById(activeAgentId)
+                    runCmd = catalogAgent?.runCommand
                 }
+
+                if (runCmd.isNullOrBlank()) {
+                    runCmd = activeAgentId
+                }
+
                 try {
                     val escaped = content.replace("\"", "\\\"")
                     val result = localCommandRunner.executeCommand("echo \"$escaped\" | $runCmd")
@@ -425,7 +425,8 @@ class ChatViewModel(
                     application.container.repository,
                     application.container.aiProvider,
                     application.container.localCommandRunner,
-                    application.container.prefsManager
+                    application.container.prefsManager,
+                    application.container.openCodeRepository
                 ) as T
             }
         }

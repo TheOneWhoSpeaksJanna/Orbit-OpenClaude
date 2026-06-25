@@ -3,6 +3,7 @@ package com.omniclaw.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -327,6 +331,9 @@ fun ChatScreen(
 
 @Composable
 private fun MessageBubble(content: String, isUser: Boolean) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -337,7 +344,17 @@ private fun MessageBubble(content: String, isUser: Boolean) {
             Surface(
                 color = MaterialTheme.colorScheme.primary,
                 shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
-                modifier = Modifier.widthIn(max = BUBBLE_MAX_WIDTH)
+                modifier = Modifier
+                    .widthIn(max = BUBBLE_MAX_WIDTH)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            clipboardManager.setText(AnnotatedString(content))
+                            android.widget.Toast
+                                .makeText(context, "Copied", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    )
             ) {
                 Text(
                     text = content,
@@ -351,7 +368,17 @@ private fun MessageBubble(content: String, isUser: Boolean) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
-                modifier = Modifier.widthIn(max = BUBBLE_MAX_WIDTH)
+                modifier = Modifier
+                    .widthIn(max = BUBBLE_MAX_WIDTH)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            clipboardManager.setText(AnnotatedString(content))
+                            android.widget.Toast
+                                .makeText(context, "Copied", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    )
             ) {
                 Text(
                     text = content,
