@@ -352,6 +352,9 @@ class SetupViewModel(
             ))
 
             try {
+                // Ensure POSIX runtime (BusyBox) is available before agent setup
+                runtimeManager.installBusyBox()
+
                 updateInstallState(agentName, status = STATUS_CHECKING)
                 withContext(Dispatchers.IO) {
                     localCommandRunner.executeCommand(

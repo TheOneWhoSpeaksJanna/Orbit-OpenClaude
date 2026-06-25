@@ -69,16 +69,6 @@ class PackageInstaller(
                     put("test_command", "node --version")
                     put("validation_rules", JSONObject().put("must_pass_exit_code", 0).put("must_contain_output", "v22"))
                 })
-                put(JSONObject().apply {
-                    put("name", "wget")
-                    put("type", "binary")
-                    put("arch", ARCH)
-                    put("url", "https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv8l")
-                    put("checksum", CHECKSUM_SKIP)
-                    put("install_method", "binary_copy")
-                    put("test_command", "wget --help")
-                    put("validation_rules", JSONObject().put("must_pass_exit_code", 0).put("must_contain_output", "wget"))
-                })
             }
             registryFile.writeText(defaultRegistry.toString(2))
         }
