@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -98,17 +99,6 @@ private val PROVIDER_COLORS = mapOf(
     "Groq" to Color(0xFFF97316),
     "Ollama" to Color(0xFF8B5CF6),
     "GitHub" to Color(0xFF24292F)
-)
-
-private val PROVIDER_ICONS = mapOf(
-    "Claude" to BrandIcons.Claude,
-    "OpenAI" to BrandIcons.OpenAI,
-    "Gemini" to BrandIcons.Gemini,
-    "OpenRouter" to BrandIcons.OpenRouter,
-    "DeepSeek" to BrandIcons.DeepSeek,
-    "Groq" to BrandIcons.Groq,
-    "Ollama" to BrandIcons.Ollama,
-    "GitHub" to BrandIcons.GitHub
 )
 
 @Composable
@@ -383,8 +373,18 @@ private fun ProviderHealthCard(
 private fun providerAccent(name: String): Color =
     PROVIDER_COLORS[name] ?: OmniClawAccent
 
-private fun providerIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector =
-    PROVIDER_ICONS[name] ?: BrandIcons.OpenRouter
+@Composable
+private fun providerIcon(name: String): ImageVector = when (name) {
+    "Claude" -> BrandIcons.Claude()
+    "OpenAI" -> BrandIcons.OpenAI()
+    "Gemini" -> BrandIcons.Gemini()
+    "OpenRouter" -> BrandIcons.OpenRouter()
+    "DeepSeek" -> BrandIcons.DeepSeek()
+    "Groq" -> BrandIcons.Groq()
+    "Ollama" -> BrandIcons.Ollama()
+    "GitHub" -> BrandIcons.GitHub()
+    else -> BrandIcons.OpenRouter()
+}
 
 private fun ConnectionState.statusColor(): Color = when (this) {
     is ConnectionState.Idle -> OmniClawTextTertiary
