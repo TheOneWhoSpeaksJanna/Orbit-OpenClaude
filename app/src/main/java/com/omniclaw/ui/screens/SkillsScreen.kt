@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.omniclaw.ui.theme.OmniClawSuccess
+import com.omniclaw.ui.theme.OmniClawWarning
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.ui.theme.OmniClawAccent
 import com.omniclaw.ui.theme.OmniClawAccentSecondary

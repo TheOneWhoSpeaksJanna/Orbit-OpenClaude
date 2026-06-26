@@ -51,7 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawDanger
+import com.omniclaw.ui.theme.OmniClawError
 import com.omniclaw.ui.theme.OmniClawGlassOverlay
 import com.omniclaw.ui.theme.OmniClawTextPrimary
 import com.omniclaw.ui.theme.OmniClawTextSecondary
@@ -94,7 +94,7 @@ fun HistoryScreen(
                     viewModel.deleteSession(id)
                     sessionToDelete = null
                 }) {
-                    Text(DELETE, color = OmniClawDanger)
+                    Text(DELETE, color = OmniClawError)
                 }
             },
             dismissButton = {
@@ -296,7 +296,7 @@ private fun HistorySessionCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(DELETE, color = OmniClawDanger) },
+                        text = { Text(DELETE, color = OmniClawError) },
                         onClick = {
                             showMenu = false
                             onDelete()

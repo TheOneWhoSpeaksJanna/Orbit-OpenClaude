@@ -132,6 +132,7 @@ fun AppShell() {
                     BottomNavTab.SETTINGS -> SettingsScreen(onNavigateBack = { selectedTab = BottomNavTab.HOME })
                 }
             }
+            }
         }
     }
 }
