@@ -53,7 +53,9 @@ fun AppShell() {
     val context = LocalContext.current
 
     BackHandler(enabled = true) {
-        if (selectedTab == BottomNavTab.HOME) {
+        if (showTermux) {
+            showTermux = false
+        } else if (selectedTab == BottomNavTab.HOME) {
             (context as? Activity)?.finish()
         } else {
             selectedTab = BottomNavTab.HOME
@@ -63,29 +65,31 @@ fun AppShell() {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(
-                containerColor = OmniClawObsidianSurface,
-                tonalElevation = 0.dp
-            ) {
-                BottomNavTab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label
+            if (!showTermux) {
+                NavigationBar(
+                    containerColor = OmniClawObsidianSurface,
+                    tonalElevation = 0.dp
+                ) {
+                    BottomNavTab.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = selectedTab == tab,
+                            onClick = { selectedTab = tab },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.label
+                                )
+                            },
+                            label = { Text(tab.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = OmniClawAccent,
+                                selectedTextColor = OmniClawAccent,
+                                unselectedIconColor = OmniClawTextSecondary,
+                                unselectedTextColor = OmniClawTextSecondary,
+                                indicatorColor = OmniClawAccent.copy(alpha = TAB_INDICATOR_ALPHA)
                             )
-                        },
-                        label = { Text(tab.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = OmniClawAccent,
-                            selectedTextColor = OmniClawAccent,
-                            unselectedIconColor = OmniClawTextSecondary,
-                            unselectedTextColor = OmniClawTextSecondary,
-                            indicatorColor = OmniClawAccent.copy(alpha = TAB_INDICATOR_ALPHA)
                         )
-                    )
+                    }
                 }
             }
         }
@@ -93,13 +97,13 @@ fun AppShell() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
             if (showTermux) {
                 TermuxScreen(onNavigateBack = { showTermux = false })
             } else {
-                AnimatedContent(
+                Box(modifier = Modifier.padding(paddingValues)) {
+                    AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = {
                     val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
@@ -142,4 +146,5 @@ fun AppShell() {
             }
         }
     }
+}
 }

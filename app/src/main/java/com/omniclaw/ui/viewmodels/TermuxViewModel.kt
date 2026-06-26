@@ -49,6 +49,9 @@ class TermuxViewModel(
 
     fun installTool(toolName: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            // Ensure BusyBox is installed before any tool operations
+            appContainer.runtimeManager.installBusyBox()
+
             val logId = java.util.UUID.randomUUID().toString()
             var currentLogOutput = "$INSTALL_START_PREFIX$toolName$INSTALL_SUFFIX"
 
@@ -91,6 +94,9 @@ class TermuxViewModel(
 
     fun executeCommand(command: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            // Ensure BusyBox is available for command execution
+            appContainer.runtimeManager.installBusyBox()
+
             val executionResult = appContainer.localCommandRunner.executeCommand(command)
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),

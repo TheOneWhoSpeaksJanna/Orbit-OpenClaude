@@ -21,6 +21,18 @@ class PackageInstaller(
     private val runtimeManager: OmniClawRuntimeManager,
     private val httpClient: OkHttpClient
 ) {
+    /** Resolve a tool path — prefer the runtime BusyBox, fall back to system binary. */
+    private fun resolveTool(tool: String): String {
+        val busybox = runtimeManager.busyBoxPath()
+        if (busybox != null) return busybox
+        return tool
+    }
+
+    /** Build PATH that includes the runtime bin dir. */
+    private fun envWithPath(): Map<String, String> {
+        val currentPath = System.getenv("PATH") ?: ""
+        return mapOf("PATH" to "${runtimeManager.binDir.absolutePath}:$currentPath")
+    }
     private val registryFile = File(runtimeManager.runtimeDir, "registry/packages.json")
 
     init {
@@ -113,12 +125,26 @@ class PackageInstaller(
                 }
             }
 
-            val processElf = ProcessBuilder("readelf", "-h", downloadFile.absolutePath).start()
-            val elfOut = processElf.inputStream.bufferedReader().readText()
-            processElf.waitFor()
-            if (type == "binary" && elfOut.contains("ld-linux")) {
-                onProgress(PROGRESS_START, "${FAIL_PREFIX}GLIBC_INCOMPATIBLE")
-                return@withContext false
+            if (type == "binary") {
+                // Quick ELF header check to reject glibc-linked binaries (ld-linux)
+                try {
+                    val bbPath = resolveTool("readelf")
+                    val elfCmd = if (runtimeManager.busyBoxPath() != null) {
+                        // busybox strings can check for ld-linux
+                        listOf(runtimeManager.busyBoxPath()!!, "strings", downloadFile.absolutePath)
+                    } else {
+                        listOf("strings", downloadFile.absolutePath)
+                    }
+                    val processElf = ProcessBuilder(elfCmd).start()
+                    val elfOut = processElf.inputStream.bufferedReader().readText()
+                    processElf.waitFor()
+                    if (elfOut.contains("ld-linux")) {
+                        onProgress(PROGRESS_START, "${FAIL_PREFIX}GLIBC_INCOMPATIBLE")
+                        return@withContext false
+                    }
+                } catch (_: Exception) {
+                    // readelf/strings not available — skip check
+                }
             }
 
             val installDir = File(runtimeManager.packagesDir, name)
@@ -127,15 +153,22 @@ class PackageInstaller(
 
             when (installMethod) {
                 "tar_extract" -> {
-                    val p = ProcessBuilder("tar", "-xzf", downloadFile.absolutePath, "-C", installDir.absolutePath).start()
-                    p.waitFor()
+                    val bb = runtimeManager.busyBoxPath()
+                    if (bb != null) {
+                        ProcessBuilder(bb, "tar", "-xzf", downloadFile.absolutePath, "-C", installDir.absolutePath)
+                            .start().waitFor()
+                    } else {
+                        ProcessBuilder("tar", "-xzf", downloadFile.absolutePath, "-C", installDir.absolutePath)
+                            .start().waitFor()
+                    }
                 }
                 "binary_copy" -> {
                     val target = File(installDir, name)
                     downloadFile.copyTo(target)
-                    target.setExecutable(true)
-                    if (!target.canExecute()) {
-                        Runtime.getRuntime().exec(arrayOf("chmod", "+x", target.absolutePath)).waitFor()
+                    try {
+                        Runtime.getRuntime().exec(arrayOf("/system/bin/chmod", "755", target.absolutePath)).waitFor()
+                    } catch (_: Exception) {
+                        target.setExecutable(true)
                     }
                 }
                 "deb_extract" -> {
@@ -168,8 +201,12 @@ class PackageInstaller(
                         }
                         raf.close()
                         if (dataTarFile != null) {
-                            val p = ProcessBuilder("tar", "-xf", dataTarFile.absolutePath, "-C", installDir.absolutePath).start()
-                            p.waitFor()
+                            val bb = runtimeManager.busyBoxPath()
+                            val tarCmd = if (bb != null)
+                                listOf(bb, "tar", "-xf", dataTarFile.absolutePath, "-C", installDir.absolutePath)
+                            else
+                                listOf("tar", "-xf", dataTarFile.absolutePath, "-C", installDir.absolutePath)
+                            ProcessBuilder(tarCmd).start().waitFor()
                         }
                     }
                 }
@@ -184,20 +221,31 @@ class PackageInstaller(
                 Runtime.getRuntime().exec(arrayOf("chmod", "+x", binToUse.absolutePath)).waitFor()
             }
 
-            val wrapper = File(runtimeManager.binDir, name)
             val libDir = File(installDir, "usr/lib")
             val ldLibraryPathEnv = if (libDir.exists()) "export LD_LIBRARY_PATH=\"${libDir.absolutePath}:\$LD_LIBRARY_PATH\"\n" else ""
 
-            wrapper.writeText("#!/system/bin/sh\n$ldLibraryPathEnv\nexec \"${binToUse.absolutePath}\" \"\$@\"\n")
-            wrapper.setExecutable(true)
-            if (!wrapper.canExecute()) {
-                Runtime.getRuntime().exec(arrayOf("chmod", "+x", wrapper.absolutePath)).waitFor()
+            // Create wrapper script for the installed binary (may fail on Android 10+)
+            val wrapper = File(runtimeManager.binDir, name)
+            try {
+                wrapper.writeText("#!/system/bin/sh\n$ldLibraryPathEnv\nexec \"${binToUse.absolutePath}\" \"\$@\"\n")
+                Runtime.getRuntime().exec(arrayOf("/system/bin/chmod", "755", wrapper.absolutePath)).waitFor()
+            } catch (_: Exception) {
+                // wrapper non-executable is OK — we fall back to direct busybox path
             }
 
             val testCmd = pkg.getString("test_command")
             val rules = pkg.getJSONObject("validation_rules")
 
-            val tProcess = ProcessBuilder(testCmd.split(" ")).start()
+            val bb = runtimeManager.busyBoxPath()
+            val testParts = if (bb != null) {
+                // Use busybox sh -c to run the test command with proper PATH
+                listOf(bb, "sh", "-c", "export PATH=${runtimeManager.binDir.absolutePath}:\$PATH && $testCmd")
+            } else {
+                testCmd.split(" ")
+            }
+            val tProcess = ProcessBuilder(testParts)
+                .apply { environment().putAll(envWithPath()) }
+                .start()
             val tOut = tProcess.inputStream.bufferedReader().readText()
             tProcess.waitFor()
 

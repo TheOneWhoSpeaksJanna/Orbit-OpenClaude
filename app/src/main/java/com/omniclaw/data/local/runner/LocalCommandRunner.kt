@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 
 private const val ERROR_EXIT_CODE = -1
@@ -21,8 +22,24 @@ class LocalCommandRunner(
     private val runtimeManager: OmniClawRuntimeManager
 ) {
 
+    /**
+     * Returns the shell command array to use.
+     *
+     * On Android 10+, wrapper scripts in app-private directories cannot be made
+     * executable. Instead of depending on system `sh` + PATH wrappers, we call
+     * the BusyBox binary directly when available: `busybox sh -c <cmd>`.
+     * When BusyBox is absent, fall back to the system shell.
+     */
+    private fun shellCommand(command: String): List<String> {
+        val busyboxPath = runtimeManager.busyBoxPath()
+        if (busyboxPath != null) {
+            return listOf(busyboxPath, "sh", "-c", command)
+        }
+        return listOf("sh", "-c", command)
+    }
+
     private fun setupProcessBuilder(command: String): ProcessBuilder {
-        val processBuilder = ProcessBuilder("sh", "-c", command)
+        val processBuilder = ProcessBuilder(shellCommand(command))
         processBuilder.directory(runtimeManager.runtimeDir)
         val env = processBuilder.environment()
         val currentPath = env["PATH"] ?: ""
@@ -104,7 +121,7 @@ class LocalCommandRunner(
             )
             newProcessMethod.isAccessible = true
             val process = newProcessMethod.invoke(
-                null, arrayOf("sh", "-c", command), null, null
+                null, shellCommand(command).toTypedArray(), null, null
             ) as Process
 
             val output = buildString {
