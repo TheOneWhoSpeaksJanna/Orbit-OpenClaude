@@ -1,7 +1,6 @@
 package com.omniclaw.ui.screens
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,7 +35,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.omniclaw.ui.theme.OmniClawObsidianBase
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,27 +46,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.omniclaw.ui.components.AnimatedGlassCard
 import com.omniclaw.ui.components.BrandIcons
+import com.omniclaw.ui.theme.MotionTokens
+import com.omniclaw.ui.theme.OmniClawColors
+import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.ConnectionState
 import com.omniclaw.ui.viewmodels.ProviderConfig
 import com.omniclaw.ui.viewmodels.ProvidersViewModel
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawAccentSecondary
-import com.omniclaw.ui.theme.OmniClawGlassBorder
-import com.omniclaw.ui.theme.OmniClawGlassOverlay
-import com.omniclaw.ui.theme.OmniClawObsidianSurface
-import com.omniclaw.ui.theme.OmniClawSuccess
-import com.omniclaw.ui.theme.OmniClawTextPrimary
-import com.omniclaw.ui.theme.OmniClawTextSecondary
-import com.omniclaw.ui.theme.OmniClawTextTertiary
-import com.omniclaw.ui.theme.OmniClawWarning
 
 private const val TITLE = "API Providers"
 private const val SUBTITLE = "Verify connectivity and manage endpoint configurations"
@@ -89,8 +80,7 @@ private const val KEY_DIALOG_DELETE = "Delete Key"
 private const val KEY_DIALOG_CANCEL = "Cancel"
 private const val KEY_DELETE_CONFIRM = "Remove this API key?"
 
-private val ERROR_RED = Color(0xFFEF4444)
-
+// Brand colors are intentionally fixed - they identify the provider, not the app theme.
 private val PROVIDER_COLORS = mapOf(
     "Claude" to Color(0xFFCC7832),
     "OpenAI" to Color(0xFF10A37F),
@@ -121,23 +111,24 @@ fun ProvidersScreen(
             Text(
                 text = TITLE,
                 style = MaterialTheme.typography.headlineMedium,
-                color = OmniClawTextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = SUBTITLE,
                 style = MaterialTheme.typography.bodyMedium,
-                color = OmniClawTextSecondary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        items(providers, key = { it.name }) { provider ->
+        itemsIndexed(providers, key = { _, item -> item.name }) { index, provider ->
             ProviderHealthCard(
                 provider = provider,
                 onVerify = { viewModel.verifyConnection(provider.name) },
-                onEditKey = { viewModel.startEditApiKey(provider.name) }
+                onEditKey = { viewModel.startEditApiKey(provider.name) },
+                modifier = Modifier.staggeredEntrance(index)
             )
         }
     }
@@ -148,13 +139,13 @@ fun ProvidersScreen(
 
         AlertDialog(
             onDismissRequest = { viewModel.cancelEditApiKey() },
-            containerColor = OmniClawObsidianSurface,
-            titleContentColor = OmniClawTextPrimary,
-            textContentColor = OmniClawTextSecondary,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = {
                 Text(
                     text = "$KEY_DIALOG_TITLE: $editingProvider",
-                    color = OmniClawTextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
@@ -183,7 +174,7 @@ fun ProvidersScreen(
                         OutlinedButton(
                             onClick = { showDeleteConfirm = true },
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = ERROR_RED
+                                contentColor = MaterialTheme.colorScheme.error
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -202,8 +193,8 @@ fun ProvidersScreen(
                 Button(
                     onClick = { viewModel.saveApiKey() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = OmniClawAccent,
-                        contentColor = OmniClawObsidianBase
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
                     )
                 ) {
                     Text(KEY_DIALOG_SAVE)
@@ -211,7 +202,7 @@ fun ProvidersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.cancelEditApiKey() }) {
-                    Text(KEY_DIALOG_CANCEL, color = OmniClawTextSecondary)
+                    Text(KEY_DIALOG_CANCEL, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -220,11 +211,11 @@ fun ProvidersScreen(
         if (showDeleteConfirm) {
             AlertDialog(
                 onDismissRequest = { showDeleteConfirm = false },
-                containerColor = OmniClawObsidianSurface,
-                titleContentColor = OmniClawTextPrimary,
-                textContentColor = OmniClawTextSecondary,
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 title = {
-                    Text(KEY_DELETE_CONFIRM, color = OmniClawTextPrimary)
+                    Text(KEY_DELETE_CONFIRM, color = MaterialTheme.colorScheme.onSurface)
                 },
                 text = {
                     Text("This will remove the saved API key for $editingProvider.")
@@ -236,7 +227,7 @@ fun ProvidersScreen(
                             viewModel.removeApiKey()
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = ERROR_RED
+                            containerColor = MaterialTheme.colorScheme.error
                         )
                     ) {
                         Text("Remove")
@@ -244,7 +235,7 @@ fun ProvidersScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeleteConfirm = false }) {
-                        Text(KEY_DIALOG_CANCEL, color = OmniClawTextSecondary)
+                        Text(KEY_DIALOG_CANCEL, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             )
@@ -256,27 +247,33 @@ fun ProvidersScreen(
 private fun ProviderHealthCard(
     provider: ProviderConfig,
     onVerify: () -> Unit,
-    onEditKey: () -> Unit
+    onEditKey: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(14.dp) }
+    val extended = OmniClawColors.current
 
+    val accentColor = MaterialTheme.colorScheme.secondary
+    val errorColor = MaterialTheme.colorScheme.error
     val statusColor by animateColorAsState(
-        targetValue = provider.connectionState.statusColor(),
-        animationSpec = spring(dampingRatio = 0.8f),
+        targetValue = provider.connectionState.statusColor(extended, accentColor, errorColor),
+        animationSpec = MotionTokens.TweenNormal,
         label = "statusColor"
     )
 
     val statusText = provider.connectionState.statusText()
     val isVerifying = provider.connectionState is ConnectionState.Verifying
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(OmniClawGlassOverlay)
-            .padding(16.dp)
+    AnimatedGlassCard(
+        onClick = null,
+        modifier = modifier.fillMaxWidth(),
+        radius = 14
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -296,7 +293,7 @@ private fun ProviderHealthCard(
                 Text(
                     text = provider.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = OmniClawTextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
@@ -311,14 +308,14 @@ private fun ProviderHealthCard(
                     Text(
                         text = statusText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = OmniClawTextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (provider.apiKeyConfigured) API_KEY_SET_LABEL else NO_API_KEY_LABEL,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (provider.apiKeyConfigured) OmniClawSuccess else OmniClawWarning
+                    color = if (provider.apiKeyConfigured) extended.success else extended.warning
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
@@ -330,7 +327,7 @@ private fun ProviderHealthCard(
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = CD_EDIT,
-                    tint = OmniClawTextSecondary,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -340,8 +337,8 @@ private fun ProviderHealthCard(
                 onClick = onVerify,
                 enabled = !isVerifying,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = OmniClawObsidianSurface,
-                    contentColor = OmniClawAccent
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.secondary
                 ),
                 shape = RoundedCornerShape(10.dp),
                 contentPadding = ButtonDefaults.TextButtonContentPadding
@@ -350,7 +347,7 @@ private fun ProviderHealthCard(
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = OmniClawAccent
+                        color = MaterialTheme.colorScheme.secondary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                 } else {
@@ -371,7 +368,7 @@ private fun ProviderHealthCard(
 }
 
 private fun providerAccent(name: String): Color =
-    PROVIDER_COLORS[name] ?: OmniClawAccent
+    PROVIDER_COLORS[name] ?: Color(0xFF38BDF8)
 
 @Composable
 private fun providerIcon(name: String): Painter = when (name) {
@@ -386,13 +383,17 @@ private fun providerIcon(name: String): Painter = when (name) {
     else -> BrandIcons.OpenRouter
 }
 
-private fun ConnectionState.statusColor(): Color = when (this) {
-    is ConnectionState.Idle -> OmniClawTextTertiary
-    is ConnectionState.Verifying -> OmniClawAccent
-    is ConnectionState.Connected -> OmniClawSuccess
-    is ConnectionState.Unauthorized -> OmniClawWarning
-    is ConnectionState.Offline -> ERROR_RED
-    is ConnectionState.Error -> ERROR_RED
+private fun ConnectionState.statusColor(
+    extended: com.omniclaw.ui.theme.OmniClawExtendedColors,
+    accentColor: Color,
+    errorColor: Color
+): Color = when (this) {
+    is ConnectionState.Idle -> extended.textTertiary
+    is ConnectionState.Verifying -> accentColor
+    is ConnectionState.Connected -> extended.success
+    is ConnectionState.Unauthorized -> extended.warning
+    is ConnectionState.Offline -> errorColor
+    is ConnectionState.Error -> errorColor
 }
 
 private fun ConnectionState.statusText(): String = when (this) {

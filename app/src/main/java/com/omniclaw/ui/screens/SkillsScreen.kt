@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,17 +29,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.omniclaw.ui.theme.OmniClawSuccess
-import com.omniclaw.ui.theme.OmniClawWarning
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawAccentSecondary
-import com.omniclaw.ui.theme.OmniClawGlassOverlay
-import com.omniclaw.ui.theme.OmniClawTextPrimary
-import com.omniclaw.ui.theme.OmniClawTextSecondary
-import com.omniclaw.ui.theme.OmniClawTextTertiary
+import com.omniclaw.ui.components.AnimatedGlassCard
+import com.omniclaw.ui.theme.OmniClawColors
+import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.SkillsViewModel
 
 private const val SECTION_ACTIVE = "Active Capabilities"
@@ -70,14 +67,14 @@ fun SkillsScreen(
             Text(
                 text = SECTION_ACTIVE,
                 style = MaterialTheme.typography.headlineMedium,
-                color = OmniClawTextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = SUBTITLE_CAPABILITIES,
                 style = MaterialTheme.typography.bodyMedium,
-                color = OmniClawTextSecondary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -85,19 +82,20 @@ fun SkillsScreen(
             Text(
                 text = SECTION_AGENTS,
                 style = MaterialTheme.typography.titleMedium,
-                color = OmniClawAccent,
+                color = MaterialTheme.colorScheme.secondary,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        items(agents, key = { it.id }) { agent ->
+        itemsIndexed(agents, key = { _, item -> item.id }) { index, agent ->
             CapabilityCard(
                 name = agent.name,
                 description = agent.systemPrompt?.take(80) ?: DEFAULT_PROMPT_FALLBACK,
                 icon = Icons.Default.Memory,
-                accentColor = OmniClawAccent,
-                status = STATUS_ACTIVE
+                accentColor = MaterialTheme.colorScheme.secondary,
+                status = STATUS_ACTIVE,
+                modifier = Modifier.staggeredEntrance(index)
             )
         }
 
@@ -107,7 +105,7 @@ fun SkillsScreen(
                     name = DEFAULT_AGENT_NAME,
                     description = DEFAULT_AGENT_DESC,
                     icon = Icons.Default.Memory,
-                    accentColor = OmniClawAccent,
+                    accentColor = MaterialTheme.colorScheme.secondary,
                     status = STATUS_READY
                 )
             }
@@ -118,7 +116,7 @@ fun SkillsScreen(
             Text(
                 text = SECTION_TOOLS,
                 style = MaterialTheme.typography.titleMedium,
-                color = OmniClawAccentSecondary,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -133,13 +131,14 @@ fun SkillsScreen(
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                defaultTools.forEach { (name, desc) ->
+                defaultTools.forEachIndexed { index, (name, desc) ->
                     CapabilityCard(
                         name = name,
                         description = desc,
                         icon = Icons.Default.Build,
-                        accentColor = OmniClawAccentSecondary,
-                        status = STATUS_AVAILABLE
+                        accentColor = MaterialTheme.colorScheme.primary,
+                        status = STATUS_AVAILABLE,
+                        modifier = Modifier.staggeredEntrance(index)
                     )
                 }
             }
@@ -151,24 +150,28 @@ fun SkillsScreen(
 private fun CapabilityCard(
     name: String,
     description: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accentColor: androidx.compose.ui.graphics.Color,
-    status: String
+    icon: ImageVector,
+    accentColor: Color,
+    status: String,
+    modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(14.dp) }
+    val extended = OmniClawColors.current
     val statusColor = when (status.lowercase()) {
-        "active", "enabled", "ready", "available" -> OmniClawSuccess
-        else -> OmniClawWarning
+        "active", "enabled", "ready", "available" -> extended.success
+        else -> extended.warning
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(OmniClawGlassOverlay)
-            .padding(16.dp)
+    AnimatedGlassCard(
+        onClick = null,
+        modifier = modifier.fillMaxWidth(),
+        radius = 14
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -189,7 +192,7 @@ private fun CapabilityCard(
                     Text(
                         text = name,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = OmniClawTextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -210,7 +213,7 @@ private fun CapabilityCard(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = OmniClawTextTertiary
+                    color = extended.textTertiary
                 )
             }
         }

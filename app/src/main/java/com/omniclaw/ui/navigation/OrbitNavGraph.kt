@@ -1,5 +1,8 @@
 package com.omniclaw.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -10,6 +13,10 @@ import com.omniclaw.ui.screens.DashboardScreen
 import com.omniclaw.ui.screens.SetupWizardScreen
 import com.omniclaw.ui.screens.SettingsScreen
 import com.omniclaw.ui.screens.TermuxScreen
+import com.omniclaw.ui.theme.MotionTokens
+
+private fun enter() = fadeIn(tween(MotionTokens.DURATION_NORMAL, easing = MotionTokens.EasingDecelerate))
+private fun exit() = fadeOut(tween(MotionTokens.DURATION_FAST, easing = MotionTokens.EasingAccelerate))
 
 @Composable
 fun OmniClawNavGraph(
@@ -18,7 +25,11 @@ fun OmniClawNavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        enterTransition = { enter() },
+        exitTransition = { exit() },
+        popEnterTransition = { enter() },
+        popExitTransition = { exit() }
     ) {
         composable(Routes.SETUP) {
             SetupWizardScreen(
@@ -45,7 +56,7 @@ fun OmniClawNavGraph(
                 }
             )
         }
-        
+
         composable(Routes.CHAT) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
             ChatScreen(

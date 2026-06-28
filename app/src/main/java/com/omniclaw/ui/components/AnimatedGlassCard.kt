@@ -1,66 +1,77 @@
 package com.omniclaw.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.border
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import com.omniclaw.ui.theme.*
+import com.omniclaw.ui.theme.MotionTokens
+import com.omniclaw.ui.theme.OmniClawColors
+import com.omniclaw.ui.theme.pressScale
 
 private const val DEFAULT_RADIUS = 16
 private const val BORDER_DP = 1
-private const val SCALE_PRESSED = 0.95f
-private const val SCALE_NORMAL = 1.0f
-private const val DAMPING_PRESS = 0.6f
-private const val STIFFNESS_PRESS = 450f
+private const val SELECTED_BORDER_DP = 1.5
 
+/**
+ * Foundational glass card used throughout the app.
+ *
+ * Theme-aware: pulls glass overlay/border from [OmniClawColors] so it renders correctly in both
+ * dark and light mode, instead of the previous hardcoded white-alpha overlay that was invisible
+ * on a light background.
+ *
+ * [onClick] is nullable - pass `null` for a purely informational card (e.g. a status display)
+ * so it doesn't fake interactivity with a ripple/press-scale that goes nowhere.
+ */
 @Composable
 fun AnimatedGlassCard(
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     radius: Int = DEFAULT_RADIUS,
+    selected: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    val shape = remember(radius) { RoundedCornerShape(radius.dp) }
+    val colors = OmniClawColors.current
 
-    val scaleTarget = if (isPressed) SCALE_PRESSED else SCALE_NORMAL
-    val animatedScale by animateFloatAsState(
-        targetValue = scaleTarget,
-        animationSpec = spring(dampingRatio = DAMPING_PRESS, stiffness = STIFFNESS_PRESS),
-        label = "CardPressBounce"
+    val backgroundColor by animateColorAsState(
+        targetValue = if (selected) colors.glassOverlayPressed else colors.glassOverlay,
+        animationSpec = MotionTokens.TweenFast,
+        label = "GlassBackground"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else colors.glassBorder,
+        animationSpec = MotionTokens.TweenFast,
+        label = "GlassBorder"
     )
 
-    Box(
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-                clip = true
-            }
-            .clip(RoundedCornerShape(radius.dp))
-            .background(
-                if (isPressed) OmniClawGlassOverlayPressed
-                else OmniClawGlassOverlay
-            )
-            .border(BORDER_DP.dp, OmniClawGlassBorder, RoundedCornerShape(radius.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            ),
-        content = content
-    )
+    var cardModifier = modifier
+        .pressScale(interactionSource)
+        .clip(shape)
+        .background(backgroundColor)
+        .border(
+            width = if (selected) SELECTED_BORDER_DP.dp else BORDER_DP.dp,
+            color = borderColor,
+            shape = shape
+        )
+
+    if (onClick != null) {
+        cardModifier = cardModifier.clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick
+        )
+    }
+
+    Box(modifier = cardModifier, content = content)
 }

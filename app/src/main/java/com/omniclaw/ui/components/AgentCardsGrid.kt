@@ -19,9 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.omniclaw.domain.models.Agent
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawSurfaceElevated
-import com.omniclaw.ui.theme.OmniClawTextSecondary
 
 private const val GRID_SPACING_DP = 12
 private const val CARD_PADDING_DP = 12
@@ -44,15 +41,16 @@ fun AgentCardsGrid(
     ) {
         agents.take(3).forEach { agent ->
             val isActive = agent.name == activeAgentName
+            val accent = MaterialTheme.colorScheme.secondary
             Card(
                 modifier = Modifier
                     .weight(1f)
                     .clickable { onAgentSelected(agent) },
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isActive) OmniClawAccent.copy(alpha = ACTIVE_BACKGROUND_ALPHA) else OmniClawSurfaceElevated
+                    containerColor = if (isActive) accent.copy(alpha = ACTIVE_BACKGROUND_ALPHA) else MaterialTheme.colorScheme.surfaceVariant
                 ),
                 border = if (isActive) BorderStroke(
-                    BORDER_WIDTH_DP.dp, OmniClawAccent.copy(alpha = ACTIVE_BORDER_ALPHA)
+                    BORDER_WIDTH_DP.dp, accent.copy(alpha = ACTIVE_BORDER_ALPHA)
                 ) else null
             ) {
                 Column(
@@ -62,14 +60,14 @@ fun AgentCardsGrid(
                     Text(
                         text = agent.name.take(INITIALS_LENGTH).uppercase(),
                         style = MaterialTheme.typography.titleLarge,
-                        color = OmniClawAccent,
+                        color = accent,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(SPACER_HEIGHT_DP.dp))
                     Text(
                         text = agent.name,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isActive) OmniClawAccent else OmniClawTextSecondary,
+                        color = if (isActive) accent else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
                     )
                 }

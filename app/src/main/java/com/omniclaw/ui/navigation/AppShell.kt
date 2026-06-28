@@ -1,10 +1,9 @@
 package com.omniclaw.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -34,9 +33,7 @@ import com.omniclaw.ui.screens.ProvidersScreen
 import com.omniclaw.ui.screens.SettingsScreen
 import com.omniclaw.ui.screens.SkillsScreen
 import com.omniclaw.ui.screens.TermuxScreen
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawObsidianSurface
-import com.omniclaw.ui.theme.OmniClawTextSecondary
+import com.omniclaw.ui.theme.MotionTokens
 
 sealed class ChatViewState {
     object SessionList : ChatViewState()
@@ -44,6 +41,33 @@ sealed class ChatViewState {
 }
 
 private const val TAB_INDICATOR_ALPHA = 0.15f
+
+/**
+ * Tab transition: fade-through (Material 3's recommended pattern for unrelated bottom-nav
+ * destinations) instead of a full-width horizontal slide. Two reasons:
+ * 1. Sliding two complete, heavily-nested screen trees across the full screen width meant both
+ *    were rendering simultaneously mid-transition - the actual source of the "laggy" tab
+ *    switches, not the animation curve itself.
+ * 2. A slide implies spatial/hierarchical relationship between tabs (like moving between pages
+ *    of a book). Bottom-nav tabs are peers, not a sequence - fade-through is the semantically
+ *    correct motion for that relationship per Material 3 guidance.
+ */
+private fun tabTransitionSpec() = (
+    fadeIn(
+        animationSpec = tween(
+            durationMillis = MotionTokens.DURATION_NORMAL,
+            delayMillis = MotionTokens.DURATION_FAST / 2,
+            easing = MotionTokens.EasingDecelerate
+        )
+    )
+) togetherWith (
+    fadeOut(
+        animationSpec = tween(
+            durationMillis = MotionTokens.DURATION_FAST,
+            easing = MotionTokens.EasingAccelerate
+        )
+    )
+)
 
 @Composable
 fun AppShell() {
@@ -67,7 +91,7 @@ fun AppShell() {
         bottomBar = {
             if (!showTermux) {
                 NavigationBar(
-                    containerColor = OmniClawObsidianSurface,
+                    containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp
                 ) {
                     BottomNavTab.entries.forEach { tab ->
@@ -82,11 +106,11 @@ fun AppShell() {
                             },
                             label = { Text(tab.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = OmniClawAccent,
-                                selectedTextColor = OmniClawAccent,
-                                unselectedIconColor = OmniClawTextSecondary,
-                                unselectedTextColor = OmniClawTextSecondary,
-                                indicatorColor = OmniClawAccent.copy(alpha = TAB_INDICATOR_ALPHA)
+                                selectedIconColor = MaterialTheme.colorScheme.secondary,
+                                selectedTextColor = MaterialTheme.colorScheme.secondary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = MaterialTheme.colorScheme.secondary.copy(alpha = TAB_INDICATOR_ALPHA)
                             )
                         )
                     }
@@ -104,47 +128,43 @@ fun AppShell() {
             } else {
                 Box(modifier = Modifier.padding(paddingValues)) {
                     AnimatedContent(
-                targetState = selectedTab,
-                transitionSpec = {
-                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                    slideInHorizontally { width -> width * direction } + fadeIn() togetherWith
-                            slideOutHorizontally { width -> width * -direction } + fadeOut()
-                },
-                label = "TabContent"
-            ) { tab ->
-                when (tab) {
-                    BottomNavTab.HOME -> DashboardScreen(
-                        onNavigateToSession = { id ->
-                            targetSessionId = id
-                            selectedTab = BottomNavTab.CHAT
-                        },
-                        onNavigateToNewSession = {
-                            targetSessionId = null
-                            selectedTab = BottomNavTab.CHAT
-                        },
-                        onNavigateToTermux = { showTermux = true },
-                        onNavigateToSettings = { selectedTab = BottomNavTab.SETTINGS }
-                    )
-                    BottomNavTab.CHAT -> ChatScreen(
-                        sessionId = targetSessionId,
-                        onNavigateBack = {
-                            targetSessionId = null
-                            selectedTab = BottomNavTab.HOME
+                        targetState = selectedTab,
+                        transitionSpec = { tabTransitionSpec() },
+                        label = "TabContent"
+                    ) { tab ->
+                        when (tab) {
+                            BottomNavTab.HOME -> DashboardScreen(
+                                onNavigateToSession = { id ->
+                                    targetSessionId = id
+                                    selectedTab = BottomNavTab.CHAT
+                                },
+                                onNavigateToNewSession = {
+                                    targetSessionId = null
+                                    selectedTab = BottomNavTab.CHAT
+                                },
+                                onNavigateToTermux = { showTermux = true },
+                                onNavigateToSettings = { selectedTab = BottomNavTab.SETTINGS }
+                            )
+                            BottomNavTab.CHAT -> ChatScreen(
+                                sessionId = targetSessionId,
+                                onNavigateBack = {
+                                    targetSessionId = null
+                                    selectedTab = BottomNavTab.HOME
+                                }
+                            )
+                            BottomNavTab.HISTORY -> HistoryScreen(
+                                onOpenSession = { id ->
+                                    targetSessionId = id
+                                    selectedTab = BottomNavTab.CHAT
+                                }
+                            )
+                            BottomNavTab.SKILLS -> SkillsScreen()
+                            BottomNavTab.PROVIDERS -> ProvidersScreen()
+                            BottomNavTab.SETTINGS -> SettingsScreen(onNavigateBack = { selectedTab = BottomNavTab.HOME })
                         }
-                    )
-                    BottomNavTab.HISTORY -> HistoryScreen(
-                        onOpenSession = { id ->
-                            targetSessionId = id
-                            selectedTab = BottomNavTab.CHAT
-                        }
-                    )
-                    BottomNavTab.SKILLS -> SkillsScreen()
-                    BottomNavTab.PROVIDERS -> ProvidersScreen()
-                    BottomNavTab.SETTINGS -> SettingsScreen(onNavigateBack = { selectedTab = BottomNavTab.HOME })
+                    }
                 }
-            }
             }
         }
     }
-}
 }

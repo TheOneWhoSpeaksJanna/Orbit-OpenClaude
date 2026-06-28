@@ -34,9 +34,9 @@ class MainViewModel(
 
     val themeMode: StateFlow<OmniClawThemeMode> = prefsManager.themeMode
         .map { raw ->
-            when (raw) {
-                THEME_LIGHT -> OmniClawThemeMode.LIGHT
-                THEME_DARK -> OmniClawThemeMode.DARK
+            when {
+                raw.equals(THEME_DARK, ignoreCase = true) -> OmniClawThemeMode.DARK
+                raw.equals(THEME_LIGHT, ignoreCase = true) -> OmniClawThemeMode.LIGHT
                 else -> OmniClawThemeMode.SYSTEM
             }
         }

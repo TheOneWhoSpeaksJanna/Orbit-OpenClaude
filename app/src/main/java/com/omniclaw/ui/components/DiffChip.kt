@@ -14,10 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawError
-import com.omniclaw.ui.theme.OmniClawSuccess
-import com.omniclaw.ui.theme.OmniClawTextSecondary
+import com.omniclaw.ui.theme.OmniClawColors
 
 private const val CHIP_SHAPE_RADIUS_DP = 6
 private const val CHIP_HORIZONTAL_PADDING_DP = 10
@@ -38,11 +35,12 @@ fun DiffChip(
 
     val insertions = Regex("(\\d+) \\+").find(stats)?.groupValues?.get(1)?.toIntOrNull() ?: 0
     val deletions = Regex("(\\d+) -").find(stats)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+    val extended = OmniClawColors.current
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(CHIP_BORDER_DP.dp, OmniClawTextSecondary.copy(alpha = BORDER_ALPHA), RoundedCornerShape(CHIP_SHAPE_RADIUS_DP.dp))
+            .border(CHIP_BORDER_DP.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = BORDER_ALPHA), RoundedCornerShape(CHIP_SHAPE_RADIUS_DP.dp))
             .padding(horizontal = CHIP_HORIZONTAL_PADDING_DP.dp, vertical = CHIP_VERTICAL_PADDING_DP.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -50,14 +48,14 @@ fun DiffChip(
         Text(
             text = filePath,
             style = MaterialTheme.typography.bodySmall,
-            color = OmniClawAccent,
+            color = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.weight(1f)
         )
         Row(horizontalArrangement = Arrangement.spacedBy(CHIP_SPACING_DP.dp)) {
             if (insertions > 0 || deletions == 0) {
                 Text(
                     text = "+$insertions",
-                    color = OmniClawSuccess,
+                    color = extended.success,
                     fontSize = CHIP_FONT_SIZE_SP.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -65,7 +63,7 @@ fun DiffChip(
             if (deletions > 0) {
                 Text(
                     text = "-$deletions",
-                    color = OmniClawError,
+                    color = MaterialTheme.colorScheme.error,
                     fontSize = CHIP_FONT_SIZE_SP.sp,
                     fontWeight = FontWeight.SemiBold
                 )

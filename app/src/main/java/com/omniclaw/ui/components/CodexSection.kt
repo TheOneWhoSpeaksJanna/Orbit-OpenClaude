@@ -25,12 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omniclaw.core.di.ToolCallRecord
 import com.omniclaw.domain.models.TermuxLog
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawError
-import com.omniclaw.ui.theme.OmniClawSuccess
-import com.omniclaw.ui.theme.OmniClawSurfaceElevated
-import com.omniclaw.ui.theme.OmniClawTextPrimary
-import com.omniclaw.ui.theme.OmniClawTextSecondary
+import com.omniclaw.ui.theme.OmniClawColors
 
 private const val SECTION_SPACING_DP = 10
 private const val CARD_PADDING_DP = 12
@@ -66,7 +61,7 @@ fun CodexSection(
         Text(
             text = HEADING_CODEX,
             style = MaterialTheme.typography.titleMedium,
-            color = OmniClawAccent,
+            color = MaterialTheme.colorScheme.secondary,
             fontWeight = FontWeight.Bold
         )
 
@@ -80,13 +75,13 @@ fun CodexSection(
                     Icon(
                         Icons.Default.Info,
                         contentDescription = null,
-                        tint = OmniClawAccent,
+                        tint = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.size(ICON_SIZE_SMALL_DP.dp)
                     )
                     Text(
                         text = "$LABEL_UNCOMMITTED_CHANGES (${lines.size} files)",
                         style = MaterialTheme.typography.labelSmall,
-                        color = OmniClawTextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 lines.forEach { line ->
@@ -101,13 +96,13 @@ fun CodexSection(
                 Icon(
                     Icons.Default.Info,
                     contentDescription = null,
-                    tint = OmniClawTextSecondary,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(ICON_SIZE_SMALL_DP.dp)
                 )
                 Text(
                     text = LABEL_NO_CHANGES,
                     style = MaterialTheme.typography.labelSmall,
-                    color = OmniClawTextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -116,7 +111,7 @@ fun CodexSection(
             Text(
                 text = HEADING_TOOL_EXECUTIONS,
                 style = MaterialTheme.typography.labelLarge,
-                color = OmniClawTextPrimary
+                color = MaterialTheme.colorScheme.onSurface
             )
             toolCallRecords.takeLast(TOOL_TAKE_LAST).reversed().forEach { record ->
                 ToolExecutionCard(record)
@@ -127,7 +122,7 @@ fun CodexSection(
             Text(
                 text = HEADING_TERMINAL_HISTORY,
                 style = MaterialTheme.typography.labelLarge,
-                color = OmniClawTextPrimary
+                color = MaterialTheme.colorScheme.onSurface
             )
             termuxLogs.takeLast(TERMINAL_TAKE_LAST).reversed().forEach { log ->
                 TerminalBlock(log = log)
@@ -142,10 +137,11 @@ private fun ToolExecutionCard(
 ) {
     val isError = record.exitCode != 0
     val preview = record.output.take(PREVIEW_MAX_LENGTH).replace("\n", " ")
+    val extended = OmniClawColors.current
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = OmniClawSurfaceElevated
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -157,14 +153,14 @@ private fun ToolExecutionCard(
                 Icon(
                     Icons.Default.Code,
                     contentDescription = null,
-                    tint = if (isError) OmniClawError else OmniClawSuccess,
+                    tint = if (isError) MaterialTheme.colorScheme.error else extended.success,
                     modifier = Modifier.size(ICON_SIZE_TOOL_DP.dp)
                 )
                 Text(
                     text = "\$ ${record.command}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = FONT_SIZE_OUTPUT_SP.sp,
-                    color = OmniClawAccent,
+                    color = MaterialTheme.colorScheme.secondary,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
@@ -172,14 +168,14 @@ private fun ToolExecutionCard(
                 Text(
                     text = "exit ${record.exitCode}",
                     fontSize = FONT_SIZE_EXIT_SP.sp,
-                    color = if (isError) OmniClawError else OmniClawTextSecondary
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             if (preview.isNotEmpty()) {
                 Text(
                     text = preview,
                     style = MaterialTheme.typography.bodySmall,
-                    color = OmniClawTextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace,
                     fontSize = FONT_SIZE_PREVIEW_SP.sp,
                     maxLines = 2,

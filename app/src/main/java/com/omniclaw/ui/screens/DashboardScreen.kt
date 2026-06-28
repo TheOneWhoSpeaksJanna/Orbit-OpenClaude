@@ -3,9 +3,10 @@ package com.omniclaw.ui.screens
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -24,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.omniclaw.ui.theme.pressScale
+import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.DashboardViewModel
 import rikka.shizuku.Shizuku
 import java.text.SimpleDateFormat
@@ -230,11 +233,12 @@ fun DashboardScreen(
                     EmptySessionsPlaceholder(onNewSession = onNavigateToNewSession)
                 }
             } else {
-                items(sessions, key = { it.id }) { session ->
+                itemsIndexed(sessions, key = { _, item -> item.id }) { index, session ->
                     SessionCard(
                         title = session.title,
                         updatedAt = session.updatedAt,
-                        onClick = { onNavigateToSession(session.id) }
+                        onClick = { onNavigateToSession(session.id) },
+                        modifier = Modifier.staggeredEntrance(index)
                     )
                 }
             }
@@ -338,12 +342,15 @@ private fun EmptySessionsPlaceholder(onNewSession: () -> Unit) {
 private fun SessionCard(
     title: String,
     updatedAt: Long,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .pressScale(interactionSource)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp

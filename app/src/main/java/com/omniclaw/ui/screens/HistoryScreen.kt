@@ -1,7 +1,6 @@
 package com.omniclaw.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
@@ -50,12 +47,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawError
-import com.omniclaw.ui.theme.OmniClawGlassOverlay
-import com.omniclaw.ui.theme.OmniClawTextPrimary
-import com.omniclaw.ui.theme.OmniClawTextSecondary
-import com.omniclaw.ui.theme.OmniClawTextTertiary
+import com.omniclaw.ui.components.AnimatedGlassCard
+import com.omniclaw.ui.theme.OmniClawColors
+import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.HistoryViewModel
 
 private const val TITLE_HISTORY = "History"
@@ -86,20 +80,20 @@ fun HistoryScreen(
             onDismissRequest = { sessionToDelete = null },
             title = { Text(DELETE_CONFIRM_TITLE) },
             text = { Text(DELETE_CONFIRM_MSG) },
-            containerColor = OmniClawGlassOverlay,
-            titleContentColor = OmniClawTextPrimary,
-            textContentColor = OmniClawTextSecondary,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteSession(id)
                     sessionToDelete = null
                 }) {
-                    Text(DELETE, color = OmniClawError)
+                    Text(DELETE, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { sessionToDelete = null }) {
-                    Text(CANCEL, color = OmniClawTextSecondary)
+                    Text(CANCEL, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -116,11 +110,11 @@ fun HistoryScreen(
                     onValueChange = { renameText = it },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = OmniClawAccent,
-                        unfocusedBorderColor = OmniClawTextTertiary,
-                        cursorColor = OmniClawAccent,
-                        focusedTextColor = OmniClawTextPrimary,
-                        unfocusedTextColor = OmniClawTextPrimary
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedBorderColor = OmniClawColors.current.textTertiary,
+                        cursorColor = MaterialTheme.colorScheme.secondary,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
@@ -131,9 +125,9 @@ fun HistoryScreen(
                     })
                 )
             },
-            containerColor = OmniClawGlassOverlay,
-            titleContentColor = OmniClawTextPrimary,
-            textContentColor = OmniClawTextSecondary,
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             confirmButton = {
                 TextButton(onClick = {
                     if (renameText.isNotBlank()) {
@@ -141,12 +135,12 @@ fun HistoryScreen(
                         sessionToRename = null
                     }
                 }) {
-                    Text(SAVE, color = OmniClawAccent)
+                    Text(SAVE, color = MaterialTheme.colorScheme.secondary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { sessionToRename = null }) {
-                    Text(CANCEL, color = OmniClawTextSecondary)
+                    Text(CANCEL, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -163,14 +157,14 @@ fun HistoryScreen(
             Text(
                 text = TITLE_HISTORY,
                 style = MaterialTheme.typography.headlineMedium,
-                color = OmniClawTextPrimary,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = SUBTITLE_HISTORY,
                 style = MaterialTheme.typography.bodyMedium,
-                color = OmniClawTextSecondary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -185,13 +179,13 @@ fun HistoryScreen(
                     Text(
                         text = NO_SESSIONS,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = OmniClawTextTertiary
+                        color = OmniClawColors.current.textTertiary
                     )
                 }
             }
         }
 
-        items(sessions, key = { it.id }) { session ->
+        itemsIndexed(sessions, key = { _, item -> item.id }) { index, session ->
             HistorySessionCard(
                 title = session.title,
                 timestamp = session.updatedAt,
@@ -200,7 +194,8 @@ fun HistoryScreen(
                 onRename = {
                     renameText = session.title
                     sessionToRename = session.id
-                }
+                },
+                modifier = Modifier.staggeredEntrance(index)
             )
         }
     }
@@ -212,34 +207,35 @@ private fun HistorySessionCard(
     timestamp: Long,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    onRename: () -> Unit
+    onRename: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val shape = remember { RoundedCornerShape(14.dp) }
+    val accent = MaterialTheme.colorScheme.secondary
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(OmniClawGlassOverlay)
-            .clickable(onClick = onClick)
+    AnimatedGlassCard(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        radius = 14
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(OmniClawAccent.copy(alpha = 0.15f)),
+                    .background(accent.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Chat,
                     contentDescription = null,
                     modifier = Modifier.size(22.dp),
-                    tint = OmniClawAccent
+                    tint = accent
                 )
             }
             Spacer(modifier = Modifier.width(14.dp))
@@ -247,7 +243,7 @@ private fun HistorySessionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = OmniClawTextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -258,13 +254,13 @@ private fun HistorySessionCard(
                         imageVector = Icons.Default.Schedule,
                         contentDescription = null,
                         modifier = Modifier.size(13.dp),
-                        tint = OmniClawTextTertiary
+                        tint = OmniClawColors.current.textTertiary
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = formatTimestamp(timestamp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = OmniClawTextTertiary
+                        color = OmniClawColors.current.textTertiary
                     )
                 }
             }
@@ -273,16 +269,16 @@ private fun HistorySessionCard(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = OmniClawTextSecondary
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    containerColor = OmniClawGlassOverlay
+                    containerColor = MaterialTheme.colorScheme.surface
                 ) {
                     DropdownMenuItem(
-                        text = { Text(RENAME, color = OmniClawTextPrimary) },
+                        text = { Text(RENAME, color = MaterialTheme.colorScheme.onSurface) },
                         onClick = {
                             showMenu = false
                             onRename()
@@ -291,12 +287,12 @@ private fun HistorySessionCard(
                             Icon(
                                 imageVector = Icons.Default.DriveFileRenameOutline,
                                 contentDescription = null,
-                                tint = OmniClawAccent
+                                tint = accent
                             )
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(DELETE, color = OmniClawError) },
+                        text = { Text(DELETE, color = MaterialTheme.colorScheme.error) },
                         onClick = {
                             showMenu = false
                             onDelete()
@@ -305,7 +301,7 @@ private fun HistorySessionCard(
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = null,
-                                tint = OmniClawError
+                                tint = MaterialTheme.colorScheme.error
                             )
                         }
                     )

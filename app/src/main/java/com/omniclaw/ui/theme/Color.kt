@@ -44,6 +44,15 @@ val OmniClawObsidianBase = Color(0xFF06080F)
 val OmniClawObsidianSurface = Color(0xFF0A0E1A)
 val OmniClawObsidianElevated = Color(0xFF0F1423)
 
+// Light-mode glass tokens. Dark mode's glass effect is a white-alpha overlay on a near-black
+// background; that same white overlay is invisible (and the dark border is wrong) on a white
+// background, which is why light mode looked broken. These use a primary-tinted overlay instead
+// so cards still read as "glass" against a light surface, with a light-appropriate border/shadow.
+val OmniClawGlassOverlayLight = Color(0x0F6C63FF)
+val OmniClawGlassOverlayDeepLight = Color(0x086C63FF)
+val OmniClawGlassOverlayPressedLight = Color(0x1F6C63FF)
+val OmniClawGlassShadowLight = Color(0x26000000)
+
 val OmniClawSuccess = Color(0xFF22C55E)
 val OmniClawWarning = Color(0xFFF59E0B)
 val OmniClawError = Color(0xFFEF4444)

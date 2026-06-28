@@ -15,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.omniclaw.ui.theme.OmniClawAccent
 
 private const val BAR_SPACING_DP = 8
 private const val ICON_SIZE_DP = 18
@@ -30,6 +29,7 @@ fun QuickActionsBar(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val accent = MaterialTheme.colorScheme.secondary
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(BAR_SPACING_DP.dp)
@@ -42,7 +42,7 @@ fun QuickActionsBar(
                     Icons.Default.Add,
                     contentDescription = null,
                     modifier = Modifier.size(ICON_SIZE_DP.dp),
-                    tint = OmniClawAccent
+                    tint = accent
                 )
             }
         )
@@ -54,7 +54,7 @@ fun QuickActionsBar(
                     Icons.Default.Terminal,
                     contentDescription = null,
                     modifier = Modifier.size(ICON_SIZE_DP.dp),
-                    tint = OmniClawAccent
+                    tint = accent
                 )
             }
         )
@@ -66,7 +66,7 @@ fun QuickActionsBar(
                     Icons.Default.Settings,
                     contentDescription = null,
                     modifier = Modifier.size(ICON_SIZE_DP.dp),
-                    tint = OmniClawAccent
+                    tint = accent
                 )
             }
         )
