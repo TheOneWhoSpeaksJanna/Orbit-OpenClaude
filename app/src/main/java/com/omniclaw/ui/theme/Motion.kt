@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
 
@@ -65,6 +66,10 @@ object MotionTokens {
     val TweenFast = tween<Float>(durationMillis = DURATION_FAST, easing = EasingStandard)
     val TweenNormal = tween<Float>(durationMillis = DURATION_NORMAL, easing = EasingStandard)
     val TweenExpressive = tween<Float>(durationMillis = DURATION_EXPRESSIVE, easing = EasingEmphasized)
+
+    // ---- Color tween specs (same durations, typed for Color) ----
+    val TweenFastColor = tween<Color>(durationMillis = DURATION_FAST, easing = EasingStandard)
+    val TweenNormalColor = tween<Color>(durationMillis = DURATION_NORMAL, easing = EasingStandard)
 }
 
 /**

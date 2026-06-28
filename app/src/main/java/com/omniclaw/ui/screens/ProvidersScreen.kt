@@ -256,7 +256,7 @@ private fun ProviderHealthCard(
     val errorColor = MaterialTheme.colorScheme.error
     val statusColor by animateColorAsState(
         targetValue = provider.connectionState.statusColor(extended, accentColor, errorColor),
-        animationSpec = MotionTokens.TweenNormal,
+        animationSpec = MotionTokens.TweenNormalColor,
         label = "statusColor"
     )
 
