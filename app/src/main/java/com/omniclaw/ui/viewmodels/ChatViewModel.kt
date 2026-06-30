@@ -253,11 +253,22 @@ class ChatViewModel(
                     runCmd = activeAgentId
                 }
 
-                // Runtime safety net: ensure the agent binary is executable
-                // File.setExecutable can silently fail on Android due to SELinux
+                // Runtime safety net: ensure the agent binary exists and is executable
                 runCmd?.let { cmd ->
                     val cmdFile = File(cmd)
-                    if (cmdFile.isFile && !cmdFile.canExecute()) {
+                    if (!cmdFile.exists()) {
+                        // Wrapper script missing (e.g. after APK update) — recreate from agent code
+                        val agentDir = File(cmdFile.parentFile?.parentFile, "agents/${cmdFile.name}")
+                        if (agentDir.exists()) {
+                            try {
+                                val entryPoint = listOf("dist/index.js", "index.js", "main.js")
+                                    .firstOrNull { File(agentDir, it).exists() } ?: "index.js"
+                                cmdFile.parentFile?.mkdirs()
+                                cmdFile.writeText("#!/system/bin/sh\nexec node ${agentDir.absolutePath}/${entryPoint} \"\$@\"\n")
+                                cmdFile.setExecutable(true)
+                            } catch (_: Exception) { /* best effort */ }
+                        }
+                    } else if (cmdFile.isFile && !cmdFile.canExecute()) {
                         try {
                             cmdFile.setExecutable(true)
                             if (!cmdFile.canExecute()) {
