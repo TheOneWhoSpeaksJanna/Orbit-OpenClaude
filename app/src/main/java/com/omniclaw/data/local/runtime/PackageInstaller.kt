@@ -209,36 +209,134 @@ class PackageInstaller(
             val libDir = File(installDir, "usr/lib")
             val ldLibraryPathEnv = if (libDir.exists()) "export LD_LIBRARY_PATH=\"${libDir.absolutePath}:\$LD_LIBRARY_PATH\"\n" else ""
 
-            // Create wrapper script for the installed binary (may fail on Android 10+)
-            val wrapper = File(runtimeManager.binDir, name)
-            try {
-                wrapper.writeText("#!$SYSTEM_SH\n$ldLibraryPathEnv\nexec \"${binToUse.absolutePath}\" \"\$@\"\n")
-                Runtime.getRuntime().exec(arrayOf(SYSTEM_CHMOD, "755", wrapper.absolutePath)).waitFor()
-            } catch (_: Exception) {
-                // wrapper non-executable is OK — we fall back to direct busybox path
+            // ── Create wrapper script(s) for the installed binary ───────────
+            // On Android 10+, scripts in app-private dirs can't be exec()'d
+            // even with +x — but `sh <wrapper>` always works because sh just
+            // reads the file. The agent wrapper scripts in SetupViewModel and
+            // ChatViewModel already use `sh <wrapper>` to invoke them, so
+            // creating the wrappers here is correct.
+            //
+            // IMPORTANT: for deb_extract packages (like nodejs and git), the
+            // package name doesn't always match the binary name. The Termux
+            // nodejs deb installs `usr/bin/node` (not `usr/bin/nodejs`), and
+            // also `usr/bin/npm`, `usr/bin/npx`. The old code only created a
+            // wrapper named after the package (`bin/nodejs`), which pointed
+            // to a non-existent `usr/bin/nodejs` — that's why `node` was
+            // "inaccessible or not found" when the openclaude wrapper tried
+            // to `exec node`.
+            //
+            // Fix: scan `usr/bin/` and create a wrapper for every binary we
+            // find there. This gives us `bin/node`, `bin/npm`, `bin/npx`,
+            // `bin/git`, etc. — matching what users actually type.
+            val wrapperDir = runtimeManager.binDir
+            wrapperDir.mkdirs()
+            val createdWrappers = mutableListOf<File>()
+
+            when (installMethod) {
+                "binary_copy" -> {
+                    // Single static binary — just wrap it under the package name.
+                    val wrapper = File(wrapperDir, name)
+                    try {
+                        wrapper.writeText("#!$SYSTEM_SH\n$ldLibraryPathEnv\nexec \"${binToUse.absolutePath}\" \"\$@\"\n")
+                        Runtime.getRuntime().exec(arrayOf(SYSTEM_CHMOD, "755", wrapper.absolutePath)).waitFor()
+                        createdWrappers += wrapper
+                    } catch (_: Exception) { }
+                }
+                "deb_extract", "tar_extract" -> {
+                    // Scan usr/bin/ for actual binaries and wrap each one.
+                    // Also scan bin/ as a fallback (some tarballs use bin/).
+                    val usrBinDir = File(installDir, "usr/bin")
+                    val altBinDir = File(installDir, "bin")
+                    val binDirsToScan = listOfNotNull(
+                        if (usrBinDir.isDirectory) usrBinDir else null,
+                        if (altBinDir.isDirectory) altBinDir else null
+                    )
+                    for (binDir in binDirsToScan) {
+                        val files = binDir.listFiles { f -> f.isFile && f.canRead() } ?: continue
+                        for (binFile in files) {
+                            // Skip obvious non-executable files
+                            if (binFile.name.endsWith(".pyc") || binFile.name.endsWith(".conf")) continue
+                            val wrapper = File(wrapperDir, binFile.name)
+                            try {
+                                wrapper.writeText(
+                                    "#!$SYSTEM_SH\n$ldLibraryPathEnv\nexec \"${binFile.absolutePath}\" \"\$@\"\n"
+                                )
+                                Runtime.getRuntime().exec(arrayOf(SYSTEM_CHMOD, "755", wrapper.absolutePath)).waitFor()
+                                createdWrappers += wrapper
+                            } catch (_: Exception) { }
+                        }
+                    }
+                    // Always also create a wrapper under the package name as a
+                    // fallback, pointing to whatever binary we determined above.
+                    if (createdWrappers.none { it.name == name } && binToUse.exists()) {
+                        val wrapper = File(wrapperDir, name)
+                        try {
+                            wrapper.writeText("#!$SYSTEM_SH\n$ldLibraryPathEnv\nexec \"${binToUse.absolutePath}\" \"\$@\"\n")
+                            Runtime.getRuntime().exec(arrayOf(SYSTEM_CHMOD, "755", wrapper.absolutePath)).waitFor()
+                            createdWrappers += wrapper
+                        } catch (_: Exception) { }
+                    }
+                }
             }
 
-            val testCmd = pkg.getString("test_command")
+            // ── Validation: run test_command via `sh <wrapper>` ─────────────
+            // The test_command in the registry is e.g. "git --version" or
+            // "node --version". We split it into the binary name + args, then
+            // invoke `sh <wrapper> <args>` — this bypasses the +x requirement
+            // on app-private storage and lets the wrapper set LD_LIBRARY_PATH.
+            //
+            // Old code ran the test_command via `busybox sh -c "git --version"`
+            // which tried to exec `binDir/git` directly → EACCES on Android 10+
+            // → "inaccessible or not found" → test failed → install reported
+            // as failed even though the binary was actually installed fine.
+            val testCmd = pkg.getString("test_command")  // e.g. "git --version"
             val rules = pkg.getJSONObject("validation_rules")
+            val testBinaryName = testCmd.substringBefore(' ')
+            val testArgs = testCmd.substringAfter(' ', "").trim()
+            val testWrapper = File(wrapperDir, testBinaryName)
+            // If we didn't create a wrapper for this exact name (e.g. test is
+            // "node --version" but package is "nodejs"), fall back to the
+            // package-name wrapper.
+            val effectiveWrapper = if (testWrapper.exists()) testWrapper
+                                   else File(wrapperDir, name)
 
             val bb = runtimeManager.busyBoxPath()
-            val testParts = if (bb != null) {
-                // Use busybox sh -c to run the test command with proper PATH
-                listOf(bb, "sh", "-c", "export PATH=${runtimeManager.binDir.absolutePath}:\$PATH && $testCmd")
+            val shellBin = bb ?: SYSTEM_SH
+            val fullTest = if (effectiveWrapper.exists()) {
+                // Run via `sh <wrapper> <args>` — wrapper sets up env + execs real binary.
+                "$shellBin ${effectiveWrapper.absolutePath} $testArgs"
             } else {
-                testCmd.split(" ")
+                // No wrapper — run the actual binary directly with env set.
+                "export PATH=${wrapperDir.absolutePath}:\$PATH && export LD_LIBRARY_PATH=${libDir.absolutePath}:\$LD_LIBRARY_PATH && ${binToUse.absolutePath} $testArgs"
             }
+            val testParts = listOf(shellBin, "-c", fullTest)
             val tProcess = ProcessBuilder(testParts)
                 .apply { environment().putAll(envWithPath()) }
                 .start()
             val tOut = tProcess.inputStream.bufferedReader().readText()
+            val tErr = tProcess.errorStream.bufferedReader().readText()
             tProcess.waitFor()
 
             if (tProcess.exitValue() == rules.getInt("must_pass_exit_code") && tOut.contains(rules.getString("must_contain_output"))) {
-                onProgress(PROGRESS_COMPLETE, "PASS")
+                val wrapped = createdWrappers.joinToString(", ") { it.name }
+                onProgress(PROGRESS_COMPLETE, "PASS (wrappers: $wrapped)")
                 return@withContext true
             } else {
-                onProgress(PROGRESS_COMPLETE, "${FAIL_PREFIX}Execution Test Failed")
+                // Surface the actual failure reason so the user can see WHY
+                // the install failed — the old "Execution Test Failed" message
+                // was useless for debugging.
+                val reason = buildString {
+                    append("${FAIL_PREFIX}Execution Test Failed")
+                    append(" (exit=${tProcess.exitValue()})")
+                    if (tErr.isNotBlank()) {
+                        append(": ")
+                        append(tErr.trim().take(300))
+                    } else if (tOut.isNotBlank()) {
+                        append(": ")
+                        append(tOut.trim().take(300))
+                    }
+                }
+                onProgress(PROGRESS_COMPLETE, reason)
                 return@withContext false
             }
 

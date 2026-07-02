@@ -1,7 +1,9 @@
 package com.omniclaw.ui.screens
 
 import android.content.pm.PackageManager
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,7 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,6 +35,7 @@ import rikka.shizuku.Shizuku
 private const val TITLE = "App Workspace & Execution"
 private const val CD_BACK = "Back"
 private const val CD_EXECUTE = "Execute"
+private const val CD_COPY = "Copy"
 private const val INPUT_LABEL = "Type a shell command..."
 private const val SUDO_LABEL = "Sudo"
 private const val CONFIRM_TITLE = "Execute Command?"
@@ -37,6 +43,7 @@ private const val CONFIRM_TITLE_PRIVILEGED = "Execute Privileged Command?"
 private const val CONFIRM_NATIVE = "Execution happens directly on your device natively."
 private const val CONFIRM_PRIVILEGED = "WARNING: This will execute via Shizuku with elevated privileges. Destructive actions can occur."
 private const val CANCEL = "Cancel"
+private const val COPIED_TOAST = "Copied to clipboard"
 private const val MBPS_FORMAT = "%.1f MB/s"
 private const val SECONDS_REMAINING_FORMAT = "%ds remaining"
 
@@ -178,6 +185,8 @@ fun TermuxScreen(
             // call, which allocated a fresh ArrayList on every recomposition —
             // including every keystroke into the command input above.
             val reversedLogs = remember(logs) { logs.asReversed() }
+            val clipboardManager = LocalClipboardManager.current
+            val ctx = LocalContext.current
 
             LazyColumn(
                 modifier = Modifier
@@ -187,35 +196,18 @@ fun TermuxScreen(
                 reverseLayout = true
             ) {
                 items(reversedLogs, key = { it.id }) { log ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = CARD_BG
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "orbit> ${log.command}",
-                                color = CMD_COLOR,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = log.output,
-                                color = if (log.exitCode == 0) SUCCESS_TEXT else ERROR_TEXT,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Divider(color = DIVIDER_COLOR, thickness = 1.dp)
+                    TerminalLogCard(
+                        command = log.command,
+                        output = log.output,
+                        exitCode = log.exitCode,
+                        onCopy = {
+                            // Copy the full command + output block so users can
+                            // paste it into bug reports or share it elsewhere.
+                            val text = "$ ${log.command}\n${log.output}"
+                            clipboardManager.setText(AnnotatedString(text))
+                            android.widget.Toast.makeText(ctx, COPIED_TOAST, android.widget.Toast.LENGTH_SHORT).show()
                         }
-                    }
+                    )
                 }
             }
 
@@ -324,5 +316,82 @@ fun TermuxScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * One terminal log entry. Shows the command, output, and a copy button.
+ *
+ * Copy is exposed two ways so it's discoverable for both touch users and
+ * users who are used to long-press-to-copy from terminal apps:
+ *  1. An explicit copy icon button in the top-right corner of each card.
+ *  2. Long-press anywhere on the card body.
+ *
+ * Both paths copy "$ <command>\n<output>" to the clipboard and show a Toast.
+ *
+ * Performance: the Card's colors are read outside the combinedClickable lambda
+ * so they don't trigger recomposition. The output Text uses `maxLines = 50`
+ * to prevent a single huge log from blowing out the layout — users can still
+ * copy the full output via the copy button.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TerminalLogCard(
+    command: String,
+    output: String,
+    exitCode: Int,
+    onCopy: () -> Unit
+) {
+    val isSuccess = exitCode == 0
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .combinedClickable(
+                onClick = {},           // no-op tap; the card is informational
+                onLongClick = onCopy    // long-press to copy
+            ),
+        colors = CardDefaults.cardColors(containerColor = CARD_BG),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header row: command on the left, copy button on the right.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "orbit> $command",
+                    color = CMD_COLOR,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = onCopy,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = CD_COPY,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = output,
+                color = if (isSuccess) SUCCESS_TEXT else ERROR_TEXT,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                maxLines = 50,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            HorizontalDivider(color = DIVIDER_COLOR, thickness = 1.dp)
+        }
     }
 }

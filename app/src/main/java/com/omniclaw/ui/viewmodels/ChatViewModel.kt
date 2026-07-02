@@ -264,7 +264,13 @@ class ChatViewModel(
                                 val entryPoint = listOf("dist/index.js", "index.js", "main.js")
                                     .firstOrNull { File(agentDir, it).exists() } ?: "index.js"
                                 cmdFile.parentFile?.mkdirs()
-                                cmdFile.writeText("#!$SYSTEM_SH\nexec node ${agentDir.absolutePath}/${entryPoint} \"\$@\"\n")
+                                // Explicitly export PATH so the wrapper finds `node`
+                                // even when invoked without our runtime PATH inherited.
+                                // cmdFile.parentFile IS the binDir (orbit_runtime/bin/).
+                                val binDirPath = cmdFile.parentFile?.absolutePath ?: ""
+                                cmdFile.writeText(
+                                    "#!$SYSTEM_SH\nexport PATH=\"$binDirPath:\$PATH\"\nexec node ${agentDir.absolutePath}/${entryPoint} \"\$@\"\n"
+                                )
                                 cmdFile.setExecutable(true)
                             } catch (_: Exception) { /* best effort */ }
                         }

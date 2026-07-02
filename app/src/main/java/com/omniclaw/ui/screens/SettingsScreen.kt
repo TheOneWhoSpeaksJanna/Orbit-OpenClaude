@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -236,6 +237,61 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                             }
                         }
+                    }
+                }
+            }
+
+            // ── Diagnostics ──────────────────────────────────────────────
+            // Shows the active log directory path so users can find their logs
+            // (previously, logs went to an app-private dir that was effectively
+            // invisible without root — users reported "the log system doesn't
+            // work"). The path is also copyable to clipboard.
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = MaterialTheme.shapes.extraLarge
+            ) {
+                val logPath = remember { com.omniclaw.core.logging.FileLogger.getLogDirPath() }
+                val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                    Text("Diagnostics", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Log directory:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = logPath ?: "(not initialized)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Tip: run 'adb logcat -s OmniClaw' to see logs in real time. " +
+                        "File logs are written to the path above — tap the button to copy it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            logPath?.let {
+                                clipboard.setText(androidx.compose.ui.text.AnnotatedString(it))
+                                android.widget.Toast.makeText(ctx, "Log path copied", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = logPath != null
+                    ) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Copy log path")
                     }
                 }
             }

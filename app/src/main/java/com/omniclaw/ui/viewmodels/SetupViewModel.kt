@@ -459,8 +459,14 @@ class SetupViewModel(
 
                     val entryPoint = DIST_CANDIDATES.firstOrNull { File(targetDir, it).exists() } ?: "index.js"
 
+                    // IMPORTANT: explicitly export PATH so the wrapper works even
+                    // when invoked from a context that didn't inherit our runtime
+                    // PATH (e.g. shelled out from another app). Without this, the
+                    // `exec node` below fails with "node: inaccessible or not found"
+                    // because the system PATH doesn't include orbit_runtime/bin/.
                     val wrapperScript = """
                         #!${SYSTEM_SH}
+                        export PATH="${runtimeManager.binDir.absolutePath}:${'$'}PATH"
                         exec node ${targetDir.absolutePath}/${entryPoint} "${'$'}@"
                     """.trimIndent()
 
@@ -526,6 +532,7 @@ class SetupViewModel(
 
             val wrapperScript = """
                 #!${SYSTEM_SH}
+                export PATH="${runtimeManager.binDir.absolutePath}:${'$'}PATH"
                 exec node ${targetDir.absolutePath}/${entryPoint} "${'$'}@"
             """.trimIndent()
 
