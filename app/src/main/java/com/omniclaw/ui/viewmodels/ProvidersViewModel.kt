@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.OmniClawApplication
+import com.omniclaw.core.config.ApiConfig
 import com.omniclaw.data.local.prefs.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +24,6 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
-private const val TIMEOUT_SECONDS = 10L
 private const val CONTENT_TYPE_JSON = "application/json; charset=utf-8"
 private const val NO_API_KEY_MSG = "No API key configured"
 private const val INVALID_API_KEY = "Invalid API key"
@@ -65,8 +65,8 @@ class ProvidersViewModel(
     val editApiKeyValue: StateFlow<String> = _editApiKeyValue.asStateFlow()
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .connectTimeout(ApiConfig.HEALTH_CHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(ApiConfig.HEALTH_CHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = CONTENT_TYPE_JSON.toMediaType()
@@ -89,8 +89,10 @@ class ProvidersViewModel(
         viewModelScope.launch {
             if (providerName == OLLAMA_PROVIDER) {
                 updateProviderState(providerName, ConnectionState.Verifying)
+                // For Ollama, the "key" slot holds the base URL — pass it through.
+                val baseUrl = prefsManager.getApiKeyForProvider(providerName).firstOrNull().orEmpty()
                 val result = withContext(Dispatchers.IO) {
-                    performHealthCheck(providerName, "")
+                    performHealthCheck(providerName, baseUrl)
                 }
                 updateProviderState(providerName, result)
                 return@launch
@@ -189,49 +191,58 @@ class ProvidersViewModel(
         }
     }
 
+    /**
+     * Build a health-check request per provider. All URLs come from [ApiConfig]
+     * so adding/changing a provider only needs an [ApiConfig] entry + a branch
+     * here — no scattered string literals anywhere else in the codebase.
+     */
     private fun buildHealthCheckRequest(name: String, apiKey: String): Request {
         return when (name) {
             "Claude" -> Request.Builder()
-                .url("https://api.anthropic.com/v1/messages")
+                .url(ApiConfig.CLAUDE_API_URL)
                 .header("x-api-key", apiKey)
-                .header("anthropic-version", "2023-06-01")
+                .header("anthropic-version", ApiConfig.CLAUDE_API_VERSION)
                 .header("content-type", "application/json")
                 .post(CLAUDE_HEALTH_CHECK_BODY.toRequestBody(jsonMediaType))
                 .build()
 
             "OpenAI" -> Request.Builder()
-                .url("https://api.openai.com/v1/models")
+                .url(ApiConfig.OPENAI_MODELS_URL)
                 .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
             "Gemini" -> Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey")
+                .url("${ApiConfig.GEMINI_BASE_URL}v1beta/models?key=$apiKey")
                 .get()
                 .build()
 
             "OpenRouter" -> Request.Builder()
-                .url("https://openrouter.ai/api/v1/auth/key")
+                .url(ApiConfig.OPENROUTER_KEY_CHECK_URL)
                 .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
             "DeepSeek" -> Request.Builder()
-                .url("https://api.deepseek.com/v1/models")
+                .url(ApiConfig.DEEPSEEK_MODELS_URL)
                 .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
             "Groq" -> Request.Builder()
-                .url("https://api.groq.com/openai/v1/models")
+                .url(ApiConfig.GROQ_MODELS_URL)
                 .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
-            OLLAMA_PROVIDER -> Request.Builder()
-                .url("http://localhost:11434/api/tags")
-                .get()
-                .build()
+            OLLAMA_PROVIDER -> {
+                // apiKey holds the base URL when set, otherwise default.
+                val base = apiKey.trim().trimEnd('/').ifBlank { ApiConfig.OLLAMA_DEFAULT_BASE_URL }
+                Request.Builder()
+                    .url("$base${ApiConfig.OLLAMA_TAGS_PATH}")
+                    .get()
+                    .build()
+            }
 
             else -> throw IllegalArgumentException("Unknown provider: $name")
         }
@@ -244,8 +255,13 @@ class ProvidersViewModel(
     }
 
     companion object {
-        val KNOWN_PROVIDERS = listOf("Claude", "OpenAI", "Gemini", "OpenRouter", "DeepSeek", "Groq", "Ollama")
-        private const val CLAUDE_HEALTH_CHECK_BODY = """{"model":"claude-sonnet-4-20250514","max_tokens":1,"messages":[{"role":"user","content":"."}]}"""
+        /** All provider names the UI knows about. MUST match AiProviderSelector keys. */
+        val KNOWN_PROVIDERS = listOf(
+            "Claude", "OpenAI", "Gemini", "OpenRouter",
+            "DeepSeek", "Groq", "Ollama"
+        )
+        private const val CLAUDE_HEALTH_CHECK_BODY =
+            """{"model":"${ApiConfig.CLAUDE_HEALTH_CHECK_MODEL}","max_tokens":1,"messages":[{"role":"user","content":"."}]}"""
 
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

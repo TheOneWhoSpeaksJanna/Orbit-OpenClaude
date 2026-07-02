@@ -41,7 +41,11 @@ import rikka.shizuku.Shizuku
 
 private val THEME_OPTIONS = listOf("System", "Dark", "Light")
 private val AGENT_OPTIONS = listOf("OpenClaude", "Claude Code", "OpenCode", "Codex", "Default")
-private val PROVIDER_OPTIONS = listOf("Claude", "OpenRouter", "OpenAI", "Gemini")
+private val PROVIDER_OPTIONS = listOf(
+    "Claude", "OpenAI", "Gemini", "OpenRouter",
+    "DeepSeek", "Groq", "Ollama"
+)
+private const val OLLAMA_HINT = "Local Ollama — leave blank for http://localhost:11434 or enter a custom URL"
 
 private const val AGENT_INSTALLED_FORMAT = "%s Installed"
 private const val AGENT_READY_DESC = "Ready to use with this device."
@@ -447,7 +451,21 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
         OutlinedTextField(
             value = apiKey,
             onValueChange = { viewModel.setApiKey(it) },
-            label = { Text(stringResource(R.string.api_key)) },
+            label = {
+                Text(
+                    if (selectedProvider == "Ollama") "Ollama server URL (optional)"
+                    else stringResource(R.string.api_key)
+                )
+            },
+            placeholder = {
+                if (selectedProvider == "Ollama") {
+                    Text(
+                        text = OLLAMA_HINT,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(

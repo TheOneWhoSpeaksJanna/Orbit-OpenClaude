@@ -1,31 +1,48 @@
 package com.omniclaw
 
+import com.omniclaw.core.config.ApiConfig
 import org.junit.Test
-import java.io.File
-import java.io.FileOutputStream
-import java.util.zip.ZipInputStream
 
+/**
+ * Verifies that every provider name listed in the UI also has a working
+ * entry in [ApiConfig]. This catches the historical bug where the UI
+ * listed 7 providers but only 4 were wired into the rest of the stack.
+ *
+ * Note: this test runs as a unit test (no Android framework needed) because
+ * ApiConfig only depends on BuildConfig, which Roborazzi/Robolectric
+ * generates for unit-test variants.
+ */
 class UrlTest {
+
     @Test
-    fun checkUrls() {
-        try {
-            val tempZip = File(System.getProperty("java.io.tmpdir"), "bootstrap.zip")
-            val termuxDir = File(System.getProperty("java.io.tmpdir"), "termux")
-            val xzBin = File(termuxDir, "bin/xz")
-            
-            // run strings to find interpreter
-            val p = ProcessBuilder("strings", xzBin.absolutePath).start()
-            val text = p.inputStream.bufferedReader().readText()
-            val lines = text.split("\n")
-            val linker = lines.filter { it.contains("linker") || it.contains("ld-") }
-            println("INTERPRETER: $linker")
-            
-            // just execute
-            val p2 = ProcessBuilder(xzBin.absolutePath, "--version").start()
-            val o2 = p2.inputStream.bufferedReader().readText()
-            val e2 = p2.errorStream.bufferedReader().readText()
-            p2.waitFor()
-            println("EXEC EXT: ${p2.exitValue()} | $o2 | $e2")
-        } catch(e: Exception) {}
+    fun checkAllProviderUrlsResolve() {
+        // Every provider the UI exposes must have at least one URL constant in ApiConfig.
+        val providers = listOf("Claude", "OpenAI", "Gemini", "OpenRouter", "DeepSeek", "Groq", "Ollama")
+
+        for (provider in providers) {
+            val url = when (provider) {
+                "Claude" -> ApiConfig.CLAUDE_API_URL
+                "OpenAI" -> ApiConfig.OPENAI_CHAT_URL
+                "Gemini" -> ApiConfig.GEMINI_BASE_URL
+                "OpenRouter" -> ApiConfig.OPENROUTER_CHAT_URL
+                "DeepSeek" -> ApiConfig.DEEPSEEK_CHAT_URL
+                "Groq" -> ApiConfig.GROQ_CHAT_URL
+                "Ollama" -> ApiConfig.OLLAMA_DEFAULT_BASE_URL
+                else -> error("Unknown provider: $provider")
+            }
+            check(url.startsWith("http://") || url.startsWith("https://")) {
+                "$provider URL is not a valid HTTP(S) URL: $url"
+            }
+        }
+    }
+
+    @Test
+    fun checkDefaultModelsAreNonEmpty() {
+        check(ApiConfig.CLAUDE_DEFAULT_MODEL.isNotBlank())
+        check(ApiConfig.OPENAI_DEFAULT_MODEL.isNotBlank())
+        check(ApiConfig.GEMINI_DEFAULT_MODEL.isNotBlank())
+        check(ApiConfig.OPENROUTER_DEFAULT_MODEL.isNotBlank())
+        check(ApiConfig.DEEPSEEK_DEFAULT_MODEL.isNotBlank())
+        check(ApiConfig.GROQ_DEFAULT_MODEL.isNotBlank())
     }
 }

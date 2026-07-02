@@ -27,6 +27,8 @@ android {
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"opencode\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"OpenCode\"")
       buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit + OpenCode\"")
+      // opencode is shipped as an npm package (@opencode-ai/cli), no GitHub fallback needed
+      buildConfigField("String", "AGENT_FALLBACK_REPO_URL", "\"\"")
       manifestPlaceholders["appLabel"] = "Orbit + OpenCode"
     }
     create("openclaude") {
@@ -36,6 +38,8 @@ android {
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"openclaude\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"OpenClaude\"")
       buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit + OpenClaude\"")
+      buildConfigField("String", "AGENT_FALLBACK_REPO_URL",
+        "\"https://github.com/Gitlawb/openclaude.git\"")
       manifestPlaceholders["appLabel"] = "Orbit + OpenClaude"
     }
     create("claudecode") {
@@ -45,6 +49,8 @@ android {
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"claude-code\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"Claude Code\"")
       buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit + Claude Code\"")
+      // @anthropic-ai/claude-code npm package — no public GitHub mirror
+      buildConfigField("String", "AGENT_FALLBACK_REPO_URL", "\"\"")
       manifestPlaceholders["appLabel"] = "Orbit + Claude Code"
     }
     create("codex") {
@@ -54,6 +60,8 @@ android {
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"codex\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"Codex\"")
       buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit + Codex\"")
+      // @openai/codex npm package — no public GitHub mirror
+      buildConfigField("String", "AGENT_FALLBACK_REPO_URL", "\"\"")
       manifestPlaceholders["appLabel"] = "Orbit + Codex"
     }
   }
@@ -66,6 +74,19 @@ android {
     versionName = "1.11"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    // ── Centralized, overridable app-level constants ──────────────
+    // Forks can override any of these with -P<key>=<value> on the Gradle
+    // command line, or via ~/.gradle/gradle.properties, without editing code.
+    buildConfigField("String", "OPENROUTER_REFERRER_URL",
+      "\"${project.findProperty("orbit.openRouterReferrerUrl") ?: "https://github.com/TheOneWhoSpeaksJanna/Orbit-AI"}\"")
+    buildConfigField("String", "OPENROUTER_APP_TITLE",
+      "\"${project.findProperty("orbit.openRouterAppTitle") ?: "Orbit AI"}\"")
+
+    // Per-flavor fallback GitHub repo used when an agent's bundled tarball
+    // is missing from APK assets. Each flavor section below can override.
+    buildConfigField("String", "AGENT_FALLBACK_REPO_URL",
+      "\"${project.findProperty("orbit.agentFallbackRepoUrl") ?: "https://github.com/Gitlawb/openclaude.git"}\"")
   }
 
   signingConfigs {

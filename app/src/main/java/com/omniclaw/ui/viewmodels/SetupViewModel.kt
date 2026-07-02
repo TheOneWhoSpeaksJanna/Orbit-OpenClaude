@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.BuildConfig
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.R
+import com.omniclaw.core.config.ApiConfig
 import com.omniclaw.core.config.FlavorConfig
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
@@ -39,9 +40,6 @@ private const val AGENT_OPENCLAUDE = "OpenClaude"
 private const val AGENT_CLAUDE_CODE = "Claude Code"
 private const val AGENT_OPENCODE = "OpenCode"
 private const val AGENT_CODEX = "Codex"
-private const val GITHUB_REPO_URL = "https://github.com/Gitlawb/openclaude.git"
-private const val CONNECT_TIMEOUT_MS = 15000
-private const val READ_TIMEOUT_MS = 60000
 private const val AGENT_DESC = "Agent provisioned during setup"
 private const val STATUS_STARTING = "Starting installation..."
 private const val STATUS_CHECKING = "Checking prerequisites..."
@@ -280,7 +278,8 @@ class SetupViewModel(
                 SetupStep.Welcome -> true
                 SetupStep.Theme -> _theme.value.isNotBlank()
                 SetupStep.Agent -> _selectedAgent.value.isNotBlank()
-                SetupStep.Provider -> _apiKey.value.isNotBlank()
+                // Ollama doesn't require an API key — its key slot is an optional base URL.
+                SetupStep.Provider -> _apiKey.value.isNotBlank() || _selectedProvider.value == "Ollama"
                 SetupStep.Shizuku -> true
                 SetupStep.Storage -> true
                 SetupStep.Summary -> true
@@ -388,13 +387,23 @@ class SetupViewModel(
                         targetDir.deleteRecursively()
                     }
 
+                    // The fallback GitHub repo URL is flavor-specific (per BuildConfig).
+                    // If empty (e.g. opencode/codex/claude-code, which ship as npm packages),
+                    // there is no GitHub fallback and the install fails gracefully.
+                    val fallbackRepoUrl = ApiConfig.AGENT_FALLBACK_REPO_URL
+                    if (fallbackRepoUrl.isBlank()) {
+                        throw IllegalStateException(
+                            "No bundled agent archive found and no fallback repo configured for this flavor."
+                        )
+                    }
+
                     withContext(Dispatchers.IO) {
-                        val zipUrl = GITHUB_REPO_URL
+                        val zipUrl = fallbackRepoUrl
                             .removeSuffix(".git") + "/archive/refs/heads/main.zip"
 
                         val connection = URL(zipUrl).openConnection()
-                        connection.connectTimeout = CONNECT_TIMEOUT_MS
-                        connection.readTimeout = READ_TIMEOUT_MS
+                        connection.connectTimeout = ApiConfig.AGENT_DOWNLOAD_CONNECT_TIMEOUT_MS
+                        connection.readTimeout = ApiConfig.AGENT_DOWNLOAD_READ_TIMEOUT_MS
 
                         val tempDir = File(runtimeManager.tmpDir, "agent_$targetDirName")
                         tempDir.deleteRecursively()
@@ -451,7 +460,7 @@ class SetupViewModel(
                     val entryPoint = DIST_CANDIDATES.firstOrNull { File(targetDir, it).exists() } ?: "index.js"
 
                     val wrapperScript = """
-                        #!/system/bin/sh
+                        #!${SYSTEM_SH}
                         exec node ${targetDir.absolutePath}/${entryPoint} "${'$'}@"
                     """.trimIndent()
 
@@ -516,7 +525,7 @@ class SetupViewModel(
             }
 
             val wrapperScript = """
-                #!/system/bin/sh
+                #!${SYSTEM_SH}
                 exec node ${targetDir.absolutePath}/${entryPoint} "${'$'}@"
             """.trimIndent()
 
@@ -616,6 +625,13 @@ class SetupViewModel(
     }
 
     companion object {
+        /**
+         * Resolve the system shell path. Uses ANDROID_ROOT so the app works on
+         * devices/ROMs that mount /system elsewhere (e.g. some emulators).
+         */
+        private val SYSTEM_SH: String =
+            android.system.Os.getenv("ANDROID_ROOT")?.let { "$it/bin/sh" } ?: "/system/bin/sh"
+
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {

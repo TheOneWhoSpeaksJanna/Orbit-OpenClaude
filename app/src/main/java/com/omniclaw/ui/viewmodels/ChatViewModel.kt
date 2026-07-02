@@ -264,7 +264,7 @@ class ChatViewModel(
                                 val entryPoint = listOf("dist/index.js", "index.js", "main.js")
                                     .firstOrNull { File(agentDir, it).exists() } ?: "index.js"
                                 cmdFile.parentFile?.mkdirs()
-                                cmdFile.writeText("#!/system/bin/sh\nexec node ${agentDir.absolutePath}/${entryPoint} \"\$@\"\n")
+                                cmdFile.writeText("#!$SYSTEM_SH\nexec node ${agentDir.absolutePath}/${entryPoint} \"\$@\"\n")
                                 cmdFile.setExecutable(true)
                             } catch (_: Exception) { /* best effort */ }
                         }
@@ -457,6 +457,10 @@ class ChatViewModel(
         private val RUN_COMMAND_REGEX = "\\[RUN: (.+?)]".toRegex()
         private val SUDO_COMMAND_REGEX = "\\[SUDO: (.+?)]".toRegex()
         val DEFAULT_MODELS = listOf("gemini-2.0-flash-exp", "gpt-4o", "claude-sonnet-4-20250514")
+
+        /** Resolve the system shell path. Honors ANDROID_ROOT for custom ROMs. */
+        private val SYSTEM_SH: String =
+            android.system.Os.getenv("ANDROID_ROOT")?.let { "$it/bin/sh" } ?: "/system/bin/sh"
 
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

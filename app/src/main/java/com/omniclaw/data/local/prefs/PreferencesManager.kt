@@ -37,6 +37,11 @@ class PreferencesManager(private val context: Context) {
         val OPENAI_API_KEY = stringPreferencesKey("openai_api_key")
         val CLAUDE_API_KEY = stringPreferencesKey("claude_api_key")
         val OPENROUTER_API_KEY = stringPreferencesKey("openrouter_api_key")
+        val DEEPSEEK_API_KEY = stringPreferencesKey("deepseek_api_key")
+        val GROQ_API_KEY = stringPreferencesKey("groq_api_key")
+        // For Ollama, the "key" slot stores the base URL of the Ollama server
+        // (default http://localhost:11434). Ollama does not require auth.
+        val OLLAMA_BASE_URL = stringPreferencesKey("ollama_base_url")
 
         val DOWNLOAD_URL = stringPreferencesKey("download_url")
         val DOWNLOAD_FILE = stringPreferencesKey("download_file")
@@ -47,6 +52,9 @@ class PreferencesManager(private val context: Context) {
         private const val PROVIDER_OPENAI = "openai"
         private const val PROVIDER_CLAUDE = "claude"
         private const val PROVIDER_OPENROUTER = "openrouter"
+        private const val PROVIDER_DEEPSEEK = "deepseek"
+        private const val PROVIDER_GROQ = "groq"
+        private const val PROVIDER_OLLAMA = "ollama"
     }
 
     val themeMode: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -105,12 +113,31 @@ class PreferencesManager(private val context: Context) {
         prefs[OPENROUTER_API_KEY]
     }
 
+    val deepSeekApiKey: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[DEEPSEEK_API_KEY]
+    }
+
+    val groqApiKey: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[GROQ_API_KEY]
+    }
+
+    /**
+     * Ollama base URL (no auth required). Returns null when unset, in which
+     * case the Ollama provider falls back to `http://localhost:11434`.
+     */
+    val ollamaBaseUrl: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[OLLAMA_BASE_URL]
+    }
+
     fun getApiKeyForProvider(provider: String): Flow<String?> {
         return when (provider.lowercase()) {
             PROVIDER_GEMINI -> geminiApiKey
             PROVIDER_OPENAI -> openAiApiKey
             PROVIDER_CLAUDE -> claudeApiKey
             PROVIDER_OPENROUTER -> openRouterApiKey
+            PROVIDER_DEEPSEEK -> deepSeekApiKey
+            PROVIDER_GROQ -> groqApiKey
+            PROVIDER_OLLAMA -> ollamaBaseUrl
             else -> geminiApiKey
         }
     }
@@ -171,12 +198,27 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[OPENROUTER_API_KEY] = key }
     }
 
+    suspend fun setDeepSeekApiKey(key: String) {
+        context.dataStore.edit { prefs -> prefs[DEEPSEEK_API_KEY] = key }
+    }
+
+    suspend fun setGroqApiKey(key: String) {
+        context.dataStore.edit { prefs -> prefs[GROQ_API_KEY] = key }
+    }
+
+    suspend fun setOllamaBaseUrl(url: String) {
+        context.dataStore.edit { prefs -> prefs[OLLAMA_BASE_URL] = url }
+    }
+
     suspend fun setApiKeyForProvider(provider: String, key: String) {
         when (provider.lowercase()) {
             PROVIDER_GEMINI -> setGeminiApiKey(key)
             PROVIDER_OPENAI -> setOpenAiApiKey(key)
             PROVIDER_CLAUDE -> setClaudeApiKey(key)
             PROVIDER_OPENROUTER -> setOpenRouterApiKey(key)
+            PROVIDER_DEEPSEEK -> setDeepSeekApiKey(key)
+            PROVIDER_GROQ -> setGroqApiKey(key)
+            PROVIDER_OLLAMA -> setOllamaBaseUrl(key)
             else -> setGeminiApiKey(key)
         }
     }

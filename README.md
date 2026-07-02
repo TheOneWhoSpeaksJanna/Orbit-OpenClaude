@@ -9,7 +9,7 @@ On-device Android workspace for AI agents. Self-contained runtime — no Termux 
 - **Agent installation from assets or GitHub** — Agents are bundled as tarballs in APK assets or downloaded from GitHub Releases on first setup.
 - **Package manager** — Built-in package installer downloads and manages runtimes (node, python, git) with registry-based tracking.
 - **Local command execution** — Agents run locally on-device via a shell-based command runner with isolated runtime environment.
-- **API-based agents** — Connect to Gemini, Claude, OpenAI, OpenRouter via API key configuration.
+- **7 supported AI providers** — Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq, and Ollama (local). Configure API keys in-app; all endpoints are centralized in `core/config/ApiConfig.kt`.
 - **Optional Shizuku elevation** — Root-level commands via Shizuku when available.
 - **Auto-updates** — In-app update system that checks GitHub Releases for new APKs and installs them via FileProvider.
 - **Logging** — All logs written to `/storage/emulated/0/omniclaw_logs/` (or app-private fallback); crashes also saved to `Downloads/omniclaw_logs/`.
@@ -18,13 +18,13 @@ On-device Android workspace for AI agents. Self-contained runtime — no Termux 
 
 The project builds 5 product flavors, each targeting a different agent ecosystem:
 
-| Flavor       | App Label        | Agent Preset   |
-|--------------|------------------|----------------|
-| `normal`     | Orbit AI         | Default        |
-| `opencode`   | OpenCode         | OpenCode       |
-| `openclaude` | OpenClaude       | OpenClaude     |
-| `claudecode` | Claude Code      | Claude Code    |
-| `codex`      | Codex            | Codex          |
+| Flavor       | App Label        | Agent Preset   | Fallback GitHub repo |
+|--------------|------------------|----------------|----------------------|
+| `normal`     | Orbit AI         | Default        | `Gitlawb/openclaude` |
+| `opencode`   | OpenCode         | OpenCode       | (npm only — no fallback) |
+| `openclaude` | OpenClaude       | OpenClaude     | `Gitlawb/openclaude` |
+| `claudecode` | Claude Code      | Claude Code    | (npm only — no fallback) |
+| `codex`      | Codex            | Codex          | (npm only — no fallback) |
 
 Build a specific flavor:
 ```bash
@@ -34,27 +34,47 @@ Build a specific flavor:
 
 The CI workflow builds all 5 flavors and creates a GitHub Release with 5 APK artifacts.
 
+## Configurable Build Constants
+
+The following Gradle project properties override baked-in defaults — set them
+in `~/.gradle/gradle.properties` (per-user) or via `-P<key>=<value>` (per-build)
+without editing source:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `orbit.openRouterReferrerUrl` | `https://github.com/TheOneWhoSpeaksJanna/Orbit-AI` | Sent as `HTTP-Referer` to OpenRouter |
+| `orbit.openRouterAppTitle`    | `Orbit AI` | Sent as `X-Title` to OpenRouter |
+| `orbit.agentFallbackRepoUrl`  | `https://github.com/Gitlawb/openclaude.git` | GitHub repo used as fallback when APK assets don't bundle an agent tarball |
+
+Per-flavor overrides for `AGENT_FALLBACK_REPO_URL` are set in `app/build.gradle.kts`.
+
 ## Architecture
 
 ```
 app/src/main/java/com/omniclaw/
-├── ui/
-│   ├── screens/         # Compose UI screens (Chat, Setup, Settings, Dashboard)
-│   └── viewmodels/      # ViewModels for reactive state
-├── data/
-│   ├── local/
-│   │   ├── runtime/     # PackageInstaller, OrbitRuntimeManager
-│   │   ├── runner/      # LocalCommandRunner (sh-based execution)
-│   │   ├── entity/      # Room entities
-│   │   └── dao/         # Room DAOs
-│   ├── remote/          # API clients (Gemini, Claude, OpenAI, OpenRouter)
-│   └── repository/      # Repository implementations
 ├── core/
-│   ├── logging/         # FileLogger (writes to omniclaw_logs/)
-│   └── di/              # Dependency injection
-├── agent/               # Agent definitions and management
-└── service/             # Foreground services, update manager
+│   ├── config/        # FlavorConfig, ApiConfig (centralized API URLs/endpoints)
+│   ├── logging/       # FileLogger (writes to omniclaw_logs/)
+│   └── di/            # Dependency injection
+├── ui/
+│   ├── screens/       # Compose UI screens (Chat, Setup, Settings, Dashboard, Providers)
+│   └── viewmodels/    # ViewModels for reactive state
+├── data/
+│   ├── api/
+│   │   ├── providers/ # One provider class per AI service (Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq, Ollama)
+│   │   └── tools/     # Tool-call implementations
+│   ├── local/
+│   │   ├── runtime/   # PackageInstaller, OrbitRuntimeManager (BusyBox bootstrap)
+│   │   ├── runner/    # LocalCommandRunner (sh-based execution)
+│   │   ├── entity/    # Room entities
+│   │   └── dao/       # Room DAOs
+│   └── repository/    # Repository implementations
+└── domain/            # Domain models, interfaces
 ```
+
+The bundled package registry lives at `app/src/main/assets/packages.default.json`
+and is copied to `orbit_runtime/registry/packages.json` on first launch. Edit
+the runtime copy to pin newer package versions without an app update.
 
 ## Runtime
 
@@ -68,10 +88,11 @@ Orbit-AI does **not** depend on Termux. The app includes a BusyBox ARM64 binary 
 ├── downloads/
 ├── agents/       # Extracted agent code
 ├── logs/
+├── registry/     # packages.json (editable runtime copy of the bundled registry)
 └── environments/
 ```
 
-PATH is automatically set to include `orbit_runtime/bin/` for all local command execution.
+PATH is automatically set to include `orbit_runtime/bin/` for all local command execution. System shell + chmod paths are resolved via `ANDROID_ROOT` so the app works on custom ROMs that mount `/system` elsewhere.
 
 ## Setup Flow
 
@@ -94,7 +115,7 @@ Logs are written to `/storage/emulated/0/omniclaw_logs/` when "All files access"
 Prerequisites: Android SDK, JDK 17+, Gradle (wrapped).
 
 ```bash
-git clone https://github.com/your-org/Orbit-AI.git
+git clone https://github.com/TheOneWhoSpeaksJanna/Orbit-AI.git
 cd Orbit-AI
 ./gradlew assembleNormalDebug
 ```
@@ -103,13 +124,16 @@ For a release build, configure signing in `app/build.gradle.kts` or use CI.
 
 ## CI/CD
 
-The GitHub Actions workflow (`android-build.yml`):
-- Builds all 5 flavors on push to `main`
-- Uploads APKs as artifacts
-- Auto-creates a GitHub Release with all APKs
+The GitHub Actions workflow (`.github/workflows/build.yml`):
+- Builds all 5 flavors on push to `main` and on pull requests
+- Runs unit tests on pull requests
+- Uploads APKs as CI artifacts (30-day retention)
+- Auto-creates a GitHub Release with all APKs on push to `main`
 
 ## Security Notes
 
-- API keys (Gemini, Claude, OpenAI, OpenRouter) are stored in user preferences — not hardcoded.
+- API keys (Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq) are stored in user preferences — not hardcoded. Ollama uses no auth; its key slot stores an optional base URL.
+- All AI provider URLs live in `core/config/ApiConfig.kt` — no scattered URL string literals.
 - Agent code runs in-app with the same UID as the app itself.
-- BusyBox wrappers use `#!/system/bin/sh` shebang to avoid external shell dependencies.
+- BusyBox wrappers use `#!/system/bin/sh` shebang (resolved via `ANDROID_ROOT`) to avoid external shell dependencies.
+- Fork-friendly build constants (`orbit.*` Gradle properties) let you rebrand without touching source.

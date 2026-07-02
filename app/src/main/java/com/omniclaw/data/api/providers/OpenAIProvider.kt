@@ -1,5 +1,6 @@
 package com.omniclaw.data.api.providers
 
+import com.omniclaw.core.config.ApiConfig
 import com.omniclaw.domain.api.AiEvent
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
@@ -32,7 +33,7 @@ class OpenAIProvider(private val httpClient: OkHttpClient) : AiProvider {
             try {
                 if (apiKey.isBlank()) return@withContext AiResult.Error("API Key is missing.")
 
-                val requestModel = if (model.isNotBlank()) model else DEFAULT_MODEL
+                val requestModel = if (model.isNotBlank()) model else ApiConfig.OPENAI_DEFAULT_MODEL
 
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
@@ -46,7 +47,7 @@ class OpenAIProvider(private val httpClient: OkHttpClient) : AiProvider {
                 }
 
                 val request = Request.Builder()
-                    .url(API_BASE_URL)
+                    .url(ApiConfig.OPENAI_CHAT_URL)
                     .header("Authorization", "Bearer $apiKey")
                     .post(jsonBody.toString().toRequestBody(jsonMediaType))
                     .build()
@@ -81,10 +82,14 @@ class OpenAIProvider(private val httpClient: OkHttpClient) : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "OpenAI",
         displayName = "OpenAI",
-        models = listOf(DEFAULT_MODEL, "gpt-4o-mini", "gpt-4-turbo"),
+        models = listOf(
+            ApiConfig.OPENAI_DEFAULT_MODEL,
+            "gpt-4o-mini",
+            "gpt-4-turbo"
+        ),
         supportsStreaming = true,
         requiresApiKey = true,
-        defaultModel = DEFAULT_MODEL
+        defaultModel = ApiConfig.OPENAI_DEFAULT_MODEL
     )
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {
@@ -92,10 +97,5 @@ class OpenAIProvider(private val httpClient: OkHttpClient) : AiProvider {
             val result = generateContent("Hi", apiKey, provider, model)
             result is AiResult.Success
         }
-    }
-
-    companion object {
-        private const val DEFAULT_MODEL = "gpt-4o"
-        private const val API_BASE_URL = "https://api.openai.com/v1/chat/completions"
     }
 }

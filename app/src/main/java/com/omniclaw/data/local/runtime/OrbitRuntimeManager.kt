@@ -9,6 +9,17 @@ import java.io.File
 private const val TAG = "OmniClawRuntime"
 private const val BUSYBOX_ASSET = "busybox-arm64"
 private const val BUSYBOX_BINARY = "busybox"
+
+/**
+ * Resolve the absolute path to a system tool (sh, chmod, cp, mv) under
+ * `/system/bin`. We honor `ANDROID_ROOT` so custom ROMs that mount the system
+ * tree elsewhere (e.g. emulators) work transparently.
+ */
+private fun systemBin(tool: String): String {
+    val root = android.system.Os.getenv("ANDROID_ROOT") ?: "/system"
+    return "$root/bin/$tool"
+}
+
 class OmniClawRuntimeManager(val context: Context) {
     val runtimeDir = File(context.filesDir, "orbit_runtime")
     val binDir = File(runtimeDir, "bin")
@@ -101,16 +112,16 @@ class OmniClawRuntimeManager(val context: Context) {
 
             // Use the system toybox chmod (always available on Android)
             val chmodResult = Runtime.getRuntime()
-                .exec(arrayOf("/system/bin/chmod", "755", busyboxFile.absolutePath))
+                .exec(arrayOf(systemBin("chmod"), "755", busyboxFile.absolutePath))
             chmodResult.waitFor()
 
             if (!busyboxFile.canExecute()) {
                 // Last resort — copy via system toybox directly
                 Runtime.getRuntime().exec(arrayOf(
-                    "/system/bin/sh", "-c",
-                    "/system/bin/cp ${busyboxFile.absolutePath} ${busyboxFile.absolutePath}.tmp && " +
-                    "/system/bin/mv ${busyboxFile.absolutePath}.tmp ${busyboxFile.absolutePath} && " +
-                    "/system/bin/chmod 755 ${busyboxFile.absolutePath}"
+                    systemBin("sh"), "-c",
+                    "${systemBin("cp")} ${busyboxFile.absolutePath} ${busyboxFile.absolutePath}.tmp && " +
+                    "${systemBin("mv")} ${busyboxFile.absolutePath}.tmp ${busyboxFile.absolutePath} && " +
+                    "${systemBin("chmod")} 755 ${busyboxFile.absolutePath}"
                 )).waitFor()
             }
 

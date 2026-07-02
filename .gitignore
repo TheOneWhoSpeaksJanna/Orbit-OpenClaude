@@ -19,3 +19,8 @@ debug.keystore
 aapt2-arm64
 .opencode/
 orbit-ai-apks-*/
+
+# Agent archives are produced by `scripts/prepare-agent.sh` at build time
+# and should not be committed — they bloat the repo and are flavor-specific.
+app/src/*/assets/agent.tar.gz
+app/src/*/assets/agent.meta

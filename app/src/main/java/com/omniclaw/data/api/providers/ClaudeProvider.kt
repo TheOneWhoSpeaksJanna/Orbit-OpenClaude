@@ -1,5 +1,6 @@
 package com.omniclaw.data.api.providers
 
+import com.omniclaw.core.config.ApiConfig
 import com.omniclaw.domain.api.AiEvent
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
@@ -32,7 +33,7 @@ class ClaudeProvider(private val httpClient: OkHttpClient) : AiProvider {
             try {
                 if (apiKey.isBlank()) return@withContext AiResult.Error("API Key is missing.")
 
-                val requestModel = if (model.isNotBlank()) model else DEFAULT_MODEL
+                val requestModel = if (model.isNotBlank()) model else ApiConfig.CLAUDE_DEFAULT_MODEL
 
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
@@ -47,9 +48,9 @@ class ClaudeProvider(private val httpClient: OkHttpClient) : AiProvider {
                 }
 
                 val request = Request.Builder()
-                    .url(API_BASE_URL)
+                    .url(ApiConfig.CLAUDE_API_URL)
                     .header("x-api-key", apiKey)
-                    .header("anthropic-version", API_VERSION)
+                    .header("anthropic-version", ApiConfig.CLAUDE_API_VERSION)
                     .header("content-type", "application/json")
                     .post(jsonBody.toString().toRequestBody(jsonMediaType))
                     .build()
@@ -84,10 +85,14 @@ class ClaudeProvider(private val httpClient: OkHttpClient) : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "Claude",
         displayName = "Anthropic Claude",
-        models = listOf(DEFAULT_MODEL, "claude-haiku-3-5-20241022", "claude-opus-4-20250514"),
+        models = listOf(
+            ApiConfig.CLAUDE_DEFAULT_MODEL,
+            "claude-haiku-3-5-20241022",
+            "claude-opus-4-20250514"
+        ),
         supportsStreaming = true,
         requiresApiKey = true,
-        defaultModel = DEFAULT_MODEL
+        defaultModel = ApiConfig.CLAUDE_DEFAULT_MODEL
     )
 
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {
@@ -98,9 +103,6 @@ class ClaudeProvider(private val httpClient: OkHttpClient) : AiProvider {
     }
 
     companion object {
-        private const val DEFAULT_MODEL = "claude-sonnet-4-20250514"
-        private const val API_BASE_URL = "https://api.anthropic.com/v1/messages"
-        private const val API_VERSION = "2023-06-01"
         private const val MAX_TOKENS = 1024
     }
 }

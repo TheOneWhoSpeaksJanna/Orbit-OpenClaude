@@ -4,6 +4,8 @@ on:
   push:
     branches: [ "main" ]
     tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
 
 permissions:
   contents: write
@@ -40,8 +42,11 @@ jobs:
       with:
         cache-read-only: ${{ github.event_name != 'push' }}
 
-    - name: Build with Gradle
+    - name: Build debug APKs (all flavors)
       run: ./gradlew assembleDebug --no-daemon
+
+    - name: Run unit tests
+      run: ./gradlew testNormalDebugUnitTest --no-daemon
 
     - name: Collect APKs
       run: |
@@ -55,7 +60,16 @@ jobs:
         fi
         ls -la release/
 
+    - name: Upload APK artifacts
+      if: github.event_name == 'push'
+      uses: actions/upload-artifact@v4
+      with:
+        name: orbit-ai-apks-${{ github.run_number }}
+        path: release/*.apk
+        retention-days: 30
+
     - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ github.run_number }}

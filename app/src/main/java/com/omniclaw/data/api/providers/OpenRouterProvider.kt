@@ -1,5 +1,6 @@
 package com.omniclaw.data.api.providers
 
+import com.omniclaw.core.config.ApiConfig
 import com.omniclaw.domain.api.AiEvent
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
@@ -38,7 +39,7 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
             try {
                 if (apiKey.isBlank()) return@withContext AiResult.Error("API Key is missing.")
 
-                val requestModel = if (model.isNotBlank()) model else DEFAULT_MODEL
+                val requestModel = if (model.isNotBlank()) model else ApiConfig.OPENROUTER_DEFAULT_MODEL
 
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
@@ -52,10 +53,10 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
                 }
 
                 val request = Request.Builder()
-                    .url(API_BASE_URL)
+                    .url(ApiConfig.OPENROUTER_CHAT_URL)
                     .addHeader("Authorization", "Bearer $apiKey")
-                    .addHeader("HTTP-Referer", REFERRER_URL)
-                    .addHeader("X-Title", APP_TITLE)
+                    .addHeader("HTTP-Referer", ApiConfig.OPENROUTER_REFERRER_URL)
+                    .addHeader("X-Title", ApiConfig.OPENROUTER_APP_TITLE)
                     .post(jsonBody.toString().toRequestBody(jsonMediaType))
                     .build()
 
@@ -86,7 +87,7 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
     override suspend fun testConnection(provider: String, apiKey: String, model: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val requestModel = if (model.isNotBlank()) model else DEFAULT_MODEL
+                val requestModel = if (model.isNotBlank()) model else ApiConfig.OPENROUTER_DEFAULT_MODEL
                 val jsonBody = JSONObject().apply {
                     put("model", requestModel)
                     put("max_tokens", 1)
@@ -99,10 +100,10 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
                     put("messages", messages)
                 }
                 val request = Request.Builder()
-                    .url(API_BASE_URL)
+                    .url(ApiConfig.OPENROUTER_CHAT_URL)
                     .addHeader("Authorization", "Bearer $apiKey")
-                    .addHeader("HTTP-Referer", REFERRER_URL)
-                    .addHeader("X-Title", APP_TITLE)
+                    .addHeader("HTTP-Referer", ApiConfig.OPENROUTER_REFERRER_URL)
+                    .addHeader("X-Title", ApiConfig.OPENROUTER_APP_TITLE)
                     .post(jsonBody.toString().toRequestBody(jsonMediaType))
                     .build()
                 val response = httpClient.newCall(request).execute()
@@ -121,10 +122,10 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
         return withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder()
-                    .url(MODELS_API_URL)
+                    .url(ApiConfig.OPENROUTER_MODELS_URL)
                     .addHeader("Authorization", "Bearer $apiKey")
-                    .addHeader("HTTP-Referer", REFERRER_URL)
-                    .addHeader("X-Title", APP_TITLE)
+                    .addHeader("HTTP-Referer", ApiConfig.OPENROUTER_REFERRER_URL)
+                    .addHeader("X-Title", ApiConfig.OPENROUTER_APP_TITLE)
                     .build()
 
                 val response = httpClient.newCall(request).execute()
@@ -166,17 +167,16 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
     override val metadata: ProviderMetadata = ProviderMetadata(
         name = "OpenRouter",
         displayName = "OpenRouter",
-        models = listOf("openai/gpt-4o", "anthropic/claude-sonnet-4-20250514", "google/gemini-2.0-flash-exp"),
+        models = listOf(
+            ApiConfig.OPENROUTER_DEFAULT_MODEL,
+            "anthropic/claude-sonnet-4-20250514",
+            "google/gemini-2.0-flash-exp"
+        ),
         supportsStreaming = true,
         requiresApiKey = true
     )
 
     companion object {
-        private const val DEFAULT_MODEL = "openai/gpt-4o"
-        private const val API_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
-        private const val MODELS_API_URL = "https://openrouter.ai/api/v1/models"
-        private const val REFERRER_URL = "https://github.com/TheOneWhoSpeaksJanna/Orbit-AI"
-        private const val APP_TITLE = "Orbit AI"
         private const val CACHE_DURATION_MS = 300_000L
     }
 }
