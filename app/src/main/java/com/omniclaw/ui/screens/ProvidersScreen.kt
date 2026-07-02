@@ -128,7 +128,7 @@ fun ProvidersScreen(
                 provider = provider,
                 onVerify = { viewModel.verifyConnection(provider.name) },
                 onEditKey = { viewModel.startEditApiKey(provider.name) },
-                modifier = Modifier.staggeredEntrance(index)
+                modifier = Modifier.staggeredEntrance(index, itemId = provider.name)
             )
         }
     }

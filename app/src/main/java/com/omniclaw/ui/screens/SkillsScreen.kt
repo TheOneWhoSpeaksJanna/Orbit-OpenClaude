@@ -95,7 +95,7 @@ fun SkillsScreen(
                 icon = Icons.Default.Memory,
                 accentColor = MaterialTheme.colorScheme.secondary,
                 status = STATUS_ACTIVE,
-                modifier = Modifier.staggeredEntrance(index)
+                modifier = Modifier.staggeredEntrance(index, itemId = agent.id)
             )
         }
 

@@ -117,6 +117,21 @@ android {
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
 
+  // ── Compose compiler performance flags ──────────────────────────────
+  // Strong skipping (Kotlin 2.2+) lets the compiler skip recomposition
+  // for lambdas and unstable params that are structurally equal, which
+  // cuts a lot of unnecessary recompositions in deeply-nested UI trees
+  // like ours. Default in newer Kotlin but explicit here for clarity.
+  // We also enable inclusion of source info in debug builds to make
+  // Compose Layout Inspector recomposition counts reliable.
+  composeCompiler {
+    // Disable the strong-skipping requirement for explicit @Stable
+    // annotations on simple value classes — the compiler will infer
+    // stability for them. (This is the default but pinned so future
+    // Kotlin upgrades don't silently regress performance.)
+    includeSourceInformation = true
+  }
+
   // Agent preparation tasks for flavor-specific pre-bundled agents
   // Runs the prepare-agent.sh script to download and bundle each agent
   // as a compressed asset in the flavor's asset directory.

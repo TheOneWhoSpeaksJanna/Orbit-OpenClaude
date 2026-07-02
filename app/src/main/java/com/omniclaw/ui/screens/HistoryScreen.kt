@@ -195,7 +195,9 @@ fun HistoryScreen(
                     renameText = session.title
                     sessionToRename = session.id
                 },
-                modifier = Modifier.staggeredEntrance(index)
+                // Pass item id so staggeredEntrance doesn't re-fire on index shift.
+                itemId = session.id,
+                modifier = Modifier.staggeredEntrance(index, itemId = session.id)
             )
         }
     }
@@ -208,10 +210,16 @@ private fun HistorySessionCard(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onRename: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    itemId: Any? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.secondary
+    val extended = OmniClawColors.current
+    // Format the relative timestamp once per timestamp change — this allocates
+    // a SimpleDateFormat + Date every call and is the kind of work that
+    // quietly shows up in flame charts during list scroll.
+    val relativeTime = remember(timestamp) { formatTimestamp(timestamp) }
 
     AnimatedGlassCard(
         onClick = onClick,
@@ -254,13 +262,13 @@ private fun HistorySessionCard(
                         imageVector = Icons.Default.Schedule,
                         contentDescription = null,
                         modifier = Modifier.size(13.dp),
-                        tint = OmniClawColors.current.textTertiary
+                        tint = extended.textTertiary
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = formatTimestamp(timestamp),
+                        text = relativeTime,
                         style = MaterialTheme.typography.bodySmall,
-                        color = OmniClawColors.current.textTertiary
+                        color = extended.textTertiary
                     )
                 }
             }

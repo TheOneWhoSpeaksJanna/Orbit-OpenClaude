@@ -155,7 +155,9 @@ fun ModelBrowserSheet(
                     contentPadding = PaddingValues(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = CONTENT_PADDING_DP.dp),
                     verticalArrangement = Arrangement.spacedBy(CARD_SPACING_DP.dp)
                 ) {
-                    items(filteredModels) { model ->
+                    // Stable key = model id so Compose can reuse item compositions
+                    // across filter changes instead of rebuilding every card.
+                    items(filteredModels, key = { it.id }) { model ->
                         ModelCard(
                             model = model,
                             isSelected = model.id == selectedModelId,

@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -27,6 +28,14 @@ private const val STROKE_LARGE = 2.5f
 /**
  * Unique illustrative avatar for each downloadable agent.
  * Draws a gradient-background circle with a distinctive agent icon on top.
+ *
+ * Performance: the radial gradient [Brush] is cached via [remember] so we
+ * don't allocate a new Brush on every draw pass. The agent-icon Path
+ * objects are still allocated per draw inside the icon functions — these
+ * are small (~5 vertices each) and only run once per avatar per frame,
+ * so the overhead is acceptable for the typical "few avatars per screen"
+ * case. If you start rendering dozens of avatars simultaneously, consider
+ * memoizing the Paths too via a LruCache keyed on iconName.
  */
 @Composable
 fun AgentAvatar(
@@ -35,25 +44,31 @@ fun AgentAvatar(
     size: Dp = AVATAR_SIZE_DP.dp,
     modifier: Modifier = Modifier
 ) {
+    // Cache the radial gradient Brush per (color, size) — the previous
+    // version allocated a fresh Brush.radialGradient on every draw call,
+    // which is the kind of thing that quietly shows up as jank in flame
+    // charts when many avatars are visible at once.
+    val radiusPx = remember(size) { size.value }
+    val backgroundBrush = remember(accentColor, radiusPx) {
+        Brush.radialGradient(
+            colors = listOf(
+                accentColor.copy(alpha = 0.25f),
+                accentColor.copy(alpha = 0.08f)
+            ),
+            center = Offset(radiusPx / 2f, radiusPx / 2f),
+            radius = radiusPx / 2f
+        )
+    }
+    val borderStrokeColor = remember(accentColor) { accentColor.copy(alpha = 0.2f) }
+
     Canvas(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
     ) {
-        val r = size.toPx() / 2f
-
+        drawCircle(brush = backgroundBrush)
         drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    accentColor.copy(alpha = 0.25f),
-                    accentColor.copy(alpha = 0.08f)
-                ),
-                center = center,
-                radius = r
-            )
-        )
-        drawCircle(
-            color = accentColor.copy(alpha = 0.2f),
+            color = borderStrokeColor,
             style = Stroke(width = STROKE_BORDER)
         )
 
@@ -71,7 +86,6 @@ fun AgentAvatar(
 }
 
 private fun DrawScope.drawTerminalIcon(color: Color, s: Float) {
-    val stroke = Stroke(width = STROKE_REGULAR * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
     drawLine(color, Offset(12f * s, 18f * s), Offset(30f * s, 18f * s), strokeWidth = STROKE_REGULAR * s)
     drawLine(color, Offset(12f * s, 28f * s), Offset(24f * s, 28f * s), strokeWidth = STROKE_REGULAR * s)
     drawLine(color, Offset(16f * s, 14f * s), Offset(20f * s, 18f * s), strokeWidth = STROKE_REGULAR * s)
@@ -154,10 +168,8 @@ private fun DrawScope.drawRadarIcon(color: Color, s: Float) {
     }
 
     drawLine(color, Offset(cx, cy), Offset(cx + 17f * s, cy - 10f * s), strokeWidth = 1.5f * s)
-
     drawCircle(color, radius = 2.5f * s, center = Offset(cx + 10f * s, cy - 5f * s))
     drawCircle(color.copy(alpha = 0.6f), radius = 2f * s, center = Offset(cx - 6f * s, cy + 11f * s))
-
     drawCircle(color, radius = 2f * s, center = Offset(cx, cy))
 }
 
@@ -189,7 +201,6 @@ private fun DrawScope.drawDatabaseIcon(color: Color, s: Float) {
 
 private fun DrawScope.drawHookIcon(color: Color, s: Float) {
     val stroke = Stroke(width = STROKE_LARGE * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
-
     val hookPath = Path().apply {
         moveTo(14f * s, 12f * s)
         cubicTo(14f * s, 12f * s, 32f * s, 12f * s, 32f * s, 20f * s)

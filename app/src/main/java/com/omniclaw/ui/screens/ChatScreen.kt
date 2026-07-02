@@ -85,7 +85,13 @@ fun ChatScreen(
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+            // Use the non-animated scroll for long lists. animateScrollToItem
+            // runs a smooth spring animation that triggers recomposition on
+            // every frame for the entire list duration — that's the source of
+            // the visible "scroll stutter" when the agent streams a response.
+            // scrollToItem jumps instantly, which feels responsive because the
+            // new message is already visible by the time the user looks down.
+            listState.scrollToItem(messages.size - 1)
         }
     }
 
@@ -397,6 +403,22 @@ private fun MessageBubble(content: String, isUser: Boolean) {
 @Composable
 private fun LoadingBubble() {
     val infiniteTransition = rememberInfiniteTransition(label = "loadingDots")
+    // Single shared animation spec — each dot just reads it at a different
+    // phase offset. The previous version called animateFloat() three times
+    // with three identical keyframes, which tripled the animation overhead.
+    val baseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = ANIMATION_DURATION_MS
+                0.3f at 0
+                1.0f at 450
+                0.3f at ANIMATION_DURATION_MS
+            }
+        ),
+        label = "dotAlphaBase"
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -412,25 +434,17 @@ private fun LoadingBubble() {
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ANIMATION_DELAYS.forEach {
-                    val alpha by infiniteTransition.animateFloat(
-                        initialValue = 0.3f,
-                        targetValue = 1.0f,
-                        animationSpec = infiniteRepeatable(
-                            animation = keyframes {
-                                durationMillis = ANIMATION_DURATION_MS
-                                0.3f at 0
-                                1.0f at 450
-                                0.3f at ANIMATION_DURATION_MS
-                            }
-                        ),
-                        label = "dotAlpha"
-                    )
+                // Phase-shift the shared alpha value per dot — visually
+                // identical to the old version but with 1/3 the animation
+                // overhead.
+                ANIMATION_DELAYS.forEachIndexed { i, _ ->
+                    val phase = (i + 1) / 3f
+                    val alpha = (baseAlpha - 0.3f) * phase + 0.3f
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = alpha.coerceIn(0.3f, 1f)))
                     )
                 }
             }

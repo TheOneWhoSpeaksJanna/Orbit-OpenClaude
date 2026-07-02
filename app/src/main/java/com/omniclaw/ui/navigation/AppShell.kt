@@ -1,10 +1,7 @@
 package com.omniclaw.ui.navigation
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,31 +40,16 @@ sealed class ChatViewState {
 private const val TAB_INDICATOR_ALPHA = 0.15f
 
 /**
- * Tab transition: fade-through (Material 3's recommended pattern for unrelated bottom-nav
- * destinations) instead of a full-width horizontal slide. Two reasons:
- * 1. Sliding two complete, heavily-nested screen trees across the full screen width meant both
- *    were rendering simultaneously mid-transition - the actual source of the "laggy" tab
- *    switches, not the animation curve itself.
- * 2. A slide implies spatial/hierarchical relationship between tabs (like moving between pages
- *    of a book). Bottom-nav tabs are peers, not a sequence - fade-through is the semantically
- *    correct motion for that relationship per Material 3 guidance.
+ * Tab transition duration. Kept deliberately short (150ms = DURATION_FAST) —
+ * a long tab-content animation is the #1 cause of perceived "laggy" nav in
+ * Material 3 apps because both the outgoing and incoming screen trees are
+ * mounted + measured + drawn simultaneously for the duration of the fade.
+ *
+ * 150ms is below the threshold where the eye perceives a delay but still
+ * gives a subtle fade so the swap doesn't feel jarring. Gmail / Google
+ * Photos / Twitter all use ~100-200ms for the same reason.
  */
-private fun tabTransitionSpec() = (
-    fadeIn(
-        animationSpec = tween(
-            durationMillis = MotionTokens.DURATION_NORMAL,
-            delayMillis = MotionTokens.DURATION_FAST / 2,
-            easing = MotionTokens.EasingDecelerate
-        )
-    )
-) togetherWith (
-    fadeOut(
-        animationSpec = tween(
-            durationMillis = MotionTokens.DURATION_FAST,
-            easing = MotionTokens.EasingAccelerate
-        )
-    )
-)
+private const val TAB_CROSSFADE_MS = MotionTokens.DURATION_FAST
 
 @Composable
 fun AppShell() {
@@ -127,9 +109,13 @@ fun AppShell() {
                 TermuxScreen(onNavigateBack = { showTermux = false })
             } else {
                 Box(modifier = Modifier.padding(paddingValues)) {
-                    AnimatedContent(
+                    // Crossfade is cheaper than AnimatedContent for tab swaps:
+                    // it doesn't run a layout pass on both children simultaneously,
+                    // it just animates the alpha of the in/out content. Combined
+                    // with the short duration above, tab switches feel instant.
+                    Crossfade(
                         targetState = selectedTab,
-                        transitionSpec = { tabTransitionSpec() },
+                        animationSpec = tween(durationMillis = TAB_CROSSFADE_MS),
                         label = "TabContent"
                     ) { tab ->
                         when (tab) {

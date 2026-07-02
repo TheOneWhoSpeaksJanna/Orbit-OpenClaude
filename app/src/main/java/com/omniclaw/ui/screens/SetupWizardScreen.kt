@@ -749,10 +749,16 @@ fun SummaryStep() {
 
 @Composable
 private fun GlassPageIndicator(totalSteps: Int, currentStep: Int) {
+    // Resolve all theme colors once outside the dot loop so they don't
+    // get re-resolved on every recomposition of the indicator row.
+    val primary = MaterialTheme.colorScheme.primary
+    val outline = MaterialTheme.colorScheme.outline
+    val background = MaterialTheme.colorScheme.background
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(background)
             .padding(vertical = 20.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -761,12 +767,17 @@ private fun GlassPageIndicator(totalSteps: Int, currentStep: Int) {
             val isActive = index == currentStep
             val isCompleted = index < currentStep
 
-            val animatedSize by animateFloatAsState(
-                targetValue = if (isActive) 12f else 8f,
+            // Animate scale + alpha together. Both values are read inside a
+            // single graphicsLayer lambda below so the dot's size animation
+            // runs entirely in the draw phase — the previous version used
+            // Modifier.size(animatedSize.dp) which forced a full recomposition
+            // + layout pass on every frame of the size animation.
+            val scale by animateFloatAsState(
+                targetValue = if (isActive) 1.5f else 1f,
                 animationSpec = spring(dampingRatio = 0.5f),
-                label = "DotSize"
+                label = "DotScale"
             )
-            val animatedAlpha by animateFloatAsState(
+            val alpha by animateFloatAsState(
                 targetValue = when {
                     isActive -> 1f
                     isCompleted -> 0.6f
@@ -777,16 +788,20 @@ private fun GlassPageIndicator(totalSteps: Int, currentStep: Int) {
             )
 
             val dotColor = when {
-                isActive -> MaterialTheme.colorScheme.primary
-                isCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                else -> MaterialTheme.colorScheme.outline
+                isActive -> primary
+                isCompleted -> primary.copy(alpha = 0.5f)
+                else -> outline
             }
 
             Box(
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
-                    .size(animatedSize.dp)
-                    .graphicsLayer { alpha = animatedAlpha }
+                    .size(8.dp)
+                    .graphicsLayer {
+                        this.alpha = alpha
+                        this.scaleX = scale
+                        this.scaleY = scale
+                    }
                     .clip(CircleShape)
                     .background(dotColor)
             )

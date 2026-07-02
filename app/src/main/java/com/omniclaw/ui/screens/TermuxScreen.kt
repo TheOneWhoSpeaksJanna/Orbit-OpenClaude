@@ -173,6 +173,12 @@ fun TermuxScreen(
                 }
             }
 
+            // Reverse once per logs change, not once per recomposition.
+            // The previous version called logs.reversed() inline in the items()
+            // call, which allocated a fresh ArrayList on every recomposition —
+            // including every keystroke into the command input above.
+            val reversedLogs = remember(logs) { logs.asReversed() }
+
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -180,7 +186,7 @@ fun TermuxScreen(
                     .padding(horizontal = 8.dp),
                 reverseLayout = true
             ) {
-                items(logs.reversed(), key = { it.id }) { log ->
+                items(reversedLogs, key = { it.id }) { log ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()

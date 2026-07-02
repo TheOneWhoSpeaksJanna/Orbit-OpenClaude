@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
@@ -108,18 +108,15 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            Surface(
-                shape = CircleShape,
-                shadowElevation = 8.dp,
-                color = MaterialTheme.colorScheme.primary
+            // FloatingActionButton is already a Surface — don't wrap it in another
+            // Surface, that just adds an extra layout pass and a redundant draw layer.
+            FloatingActionButton(
+                onClick = onNavigateToNewSession,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CircleShape
             ) {
-                FloatingActionButton(
-                    onClick = onNavigateToNewSession,
-                    containerColor = Color.Transparent,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = CD_NEW_SESSION)
-                }
+                Icon(Icons.Default.Add, contentDescription = CD_NEW_SESSION)
             }
         }
     ) { padding ->
@@ -238,7 +235,9 @@ fun DashboardScreen(
                         title = session.title,
                         updatedAt = session.updatedAt,
                         onClick = { onNavigateToSession(session.id) },
-                        modifier = Modifier.staggeredEntrance(index)
+                        // Pass item id so staggeredEntrance doesn't re-fire on index shift.
+                        itemId = session.id,
+                        modifier = Modifier.staggeredEntrance(index, itemId = session.id)
                     )
                 }
             }
@@ -264,31 +263,34 @@ private fun GlassCard(
     gradientColors: List<Color>,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val shape = MaterialTheme.shapes.large
+    // Build the Brush instances once per (color list) and cache them.
+    // Previously every recomposition built a fresh Brush.linearGradient,
+    // which invalidates the draw cache and forces a re-layout of the card.
+    val baseBrush = remember(gradientColors) { Brush.linearGradient(gradientColors) }
+    val overlayBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.08f),
+                Color.White.copy(alpha = 0.02f)
+            )
+        )
+    }
+
     Surface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
+        shape = shape,
         color = Color.Transparent,
         tonalElevation = 0.dp
     ) {
         Box(
             modifier = Modifier
-                .background(
-                    brush = Brush.linearGradient(gradientColors),
-                    shape = MaterialTheme.shapes.large
-                )
+                .background(brush = baseBrush, shape = shape)
         ) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.08f),
-                                Color.White.copy(alpha = 0.02f)
-                            )
-                        ),
-                        shape = MaterialTheme.shapes.large
-                    )
+                    .background(brush = overlayBrush, shape = shape)
             )
             Column(modifier = Modifier, content = content)
         }
@@ -309,7 +311,7 @@ private fun EmptySessionsPlaceholder(onNewSession: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                Icons.Default.Chat,
+                Icons.AutoMirrored.Filled.Chat,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -343,9 +345,16 @@ private fun SessionCard(
     title: String,
     updatedAt: Long,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    itemId: Any? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    // Format the date once per updatedAt change, not once per recomposition.
+    // SimpleDateFormat.format() allocates a Date + a StringBuilder every call,
+    // and these SessionCards can re-compose frequently during list scroll.
+    val dateStr = remember(updatedAt) {
+        DATE_SESSION_FORMAT.format(Date(updatedAt))
+    }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -364,7 +373,7 @@ private fun SessionCard(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
             ) {
                 Icon(
-                    Icons.Default.Chat,
+                    Icons.AutoMirrored.Filled.Chat,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(10.dp)
@@ -382,7 +391,6 @@ private fun SessionCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(2.dp))
-                val dateStr = DATE_SESSION_FORMAT.format(Date(updatedAt))
                 Text(
                     text = dateStr,
                     style = MaterialTheme.typography.bodySmall,
