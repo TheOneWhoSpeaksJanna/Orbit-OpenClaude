@@ -75,6 +75,15 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+    // ── ABI configuration ───────────────────────────────────────────
+    // We bundle libbusybox.so as a native library so Android extracts it to
+    // /data/app/<pkg>/lib/<abi>/ which has an SELinux label that ALLOWS exec.
+    // Files in /data/data/<pkg>/files/ (app_data_file label) CANNOT be exec'd
+    // on Android 10+ due to W^X enforcement. See OrbitRuntimeManager.
+    ndk {
+      abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    }
+
     // ── Centralized, overridable app-level constants ──────────────
     // Forks can override any of these with -P<key>=<value> on the Gradle
     // command line, or via ~/.gradle/gradle.properties, without editing code.
@@ -135,6 +144,15 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+  }
+
+  // Extract native libraries (.so files) from the APK to the filesystem.
+  // This is REQUIRED for libbusybox.so to be exec'able — without it, the
+  // .so stays inside the APK and can't be exec'd.
+  packaging {
+    jniLibs {
+      useLegacyPackaging = true
+    }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
 

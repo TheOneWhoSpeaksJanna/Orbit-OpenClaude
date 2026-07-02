@@ -1,12 +1,14 @@
 {
-  "_comment": "Orbit-AI package registry. Edit this file to add or update packages without rebuilding the app — the installer reads it on first run and writes a copy to orbit_runtime/registry/packages.json. After the first run, the runtime copy wins (so user-made changes persist across app upgrades).",
+  "_comment": "Orbit-AI package registry. Packages with 'source: termux' have their URLs resolved dynamically from the Termux APT Packages index at install time — this prevents 404s when Termux removes old versions. Packages without 'source' use the static 'url' field.",
   "_architecture_default": "aarch64",
   "packages": [
     {
       "name": "git",
+      "source": "termux",
+      "termux_name": "git",
       "type": "deb",
       "arch": "aarch64",
-      "url": "https://packages.termux.dev/apt/termux-main/pool/main/g/git/git_2.45.2_aarch64.deb",
+      "url": "",
       "checksum": "skip",
       "install_method": "deb_extract",
       "test_command": "git --version",
@@ -43,15 +45,17 @@
     },
     {
       "name": "nodejs",
+      "source": "termux",
+      "termux_name": "nodejs",
       "type": "deb",
       "arch": "aarch64",
-      "url": "https://packages.termux.dev/apt/termux-main/pool/main/n/nodejs/nodejs_22.2.0_aarch64.deb",
+      "url": "",
       "checksum": "skip",
       "install_method": "deb_extract",
       "test_command": "node --version",
       "validation_rules": {
         "must_pass_exit_code": 0,
-        "must_contain_output": "v22"
+        "must_contain_output": "v"
       }
     }
   ]

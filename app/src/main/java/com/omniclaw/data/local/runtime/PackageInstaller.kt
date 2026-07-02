@@ -95,7 +95,26 @@ class PackageInstaller(
         }
 
         try {
-            val url = pkg.getString("url")
+            // ── Dynamic URL resolution ───────────────────────────────
+            // If the registry entry has a "source" field (e.g. "termux"), we
+            // fetch the Termux APT Packages index and resolve the CURRENT URL
+            // at runtime. This prevents 404s when Termux removes old versions.
+            var url = pkg.optString("url", "")
+            val source = pkg.optString("source", "")
+            if (source == "termux" || url.isBlank()) {
+                FileLogger.i(TAG, "Resolving dynamic URL from Termux APT repo for '$packageId'...")
+                val termuxPkgName = pkg.optString("termux_name", packageId)
+                val resolvedUrl = resolveTermuxUrl(termuxPkgName)
+                if (resolvedUrl != null) {
+                    url = resolvedUrl
+                    FileLogger.i(TAG, "Resolved URL: $url")
+                } else {
+                    FileLogger.e(TAG, "Failed to resolve URL from Termux repo for '$termuxPkgName'")
+                    onProgress(PROGRESS_START, "${FAIL_PREFIX}URL_RESOLVE_FAILED (package=$termuxPkgName not in Termux repo)")
+                    return@withContext false
+                }
+            }
+
             val type = pkg.getString("type")
             val installMethod = pkg.getString("install_method")
             val name = pkg.getString("name")
@@ -395,6 +414,63 @@ class PackageInstaller(
             FileLogger.e(TAG, "installPackage('$packageId') exception: ${e.message}", e)
             onProgress(PROGRESS_START, "${FAIL_PREFIX}Exception ${e.message}")
             return@withContext false
+        }
+    }
+
+    /**
+     * Fetch the Termux APT Packages index and resolve the current .deb URL
+     * for the given package name. This dynamically resolves URLs so we never
+     * get 404s when Termux removes old package versions.
+     *
+     * Termux APT repo: https://packages.termux.dev/apt/termux-main/
+     * Packages index: dists/stable/main/binary-aarch64/Packages
+     *
+     * The index is a text file with stanzas like:
+     *   Package: nodejs
+     *   Version: 26.3.1
+     *   Filename: pool/main/n/nodejs/nodejs_26.3.1_aarch64.deb
+     *
+     * We parse it to find the Filename for the requested package, then prepend
+     * the base URL.
+     */
+    private fun resolveTermuxUrl(termuxPkgName: String): String? {
+        return try {
+            val baseUrl = "https://packages.termux.dev/apt/termux-main/"
+            val packagesUrl = "${baseUrl}dists/stable/main/binary-aarch64/Packages"
+            FileLogger.d(TAG, "Fetching Termux Packages index from $packagesUrl")
+
+            val request = Request.Builder().url(packagesUrl).build()
+            val response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                FileLogger.e(TAG, "Failed to fetch Termux Packages index: HTTP ${response.code}")
+                return null
+            }
+            val body = response.body?.string() ?: return null
+
+            // Parse the Packages index (deb822 format: key: value stanzas separated by blank lines)
+            val stanzas = body.split("\n\n")
+            for (stanza in stanzas) {
+                val pkgName = stanza.lines()
+                    .find { it.startsWith("Package: ") }
+                    ?.removePrefix("Package: ")
+                    ?.trim()
+                if (pkgName == termuxPkgName) {
+                    val filename = stanza.lines()
+                        .find { it.startsWith("Filename: ") }
+                        ?.removePrefix("Filename: ")
+                        ?.trim()
+                    if (filename != null) {
+                        val fullUrl = baseUrl + filename
+                        FileLogger.i(TAG, "Resolved $termuxPkgName → $fullUrl")
+                        return fullUrl
+                    }
+                }
+            }
+            FileLogger.w(TAG, "Package '$termuxPkgName' not found in Termux Packages index")
+            null
+        } catch (e: Exception) {
+            FileLogger.e(TAG, "Error resolving Termux URL for '$termuxPkgName': ${e.message}", e)
+            null
         }
     }
 

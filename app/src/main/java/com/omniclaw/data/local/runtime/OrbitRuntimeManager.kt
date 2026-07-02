@@ -1,7 +1,6 @@
 package com.omniclaw.data.local.runtime
 
 import android.content.Context
-import android.util.Log
 import com.omniclaw.core.logging.FileLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +9,7 @@ import java.io.File
 private const val TAG = "OmniClawRuntime"
 private const val BUSYBOX_ASSET = "busybox-arm64"
 private const val BUSYBOX_BINARY = "busybox"
+private const val BUSYBOX_NATIVE_LIB = "libbusybox.so"
 
 /**
  * Resolve the absolute path to a system tool (sh, chmod, cp, mv) under
@@ -33,6 +33,17 @@ class OmniClawRuntimeManager(val context: Context) {
 
     // Caches whether busybox is actually executable.
     private var busyboxVerified: Boolean? = null
+    // Caches the native library directory path.
+    private val nativeLibDir: String? by lazy {
+        try {
+            context.applicationInfo.nativeLibraryDir?.also {
+                FileLogger.i(TAG, "Native library directory: $it")
+            }
+        } catch (e: Exception) {
+            FileLogger.w(TAG, "Could not get nativeLibraryDir: ${e.message}")
+            null
+        }
+    }
 
     init {
         listOf(runtimeDir, binDir, tmpDir, packagesDir, downloadsDir, agentsDir, logsDir, environmentsDir).forEach {
@@ -45,39 +56,77 @@ class OmniClawRuntimeManager(val context: Context) {
         return arrayOf("PATH=${binDir.absolutePath}:$existingPath")
     }
 
-    /** Full path to the BusyBox binary, or null if not installed or not executable. */
+    /**
+     * Full path to the BusyBox binary, or null if not available.
+     *
+     * STRATEGY (in priority order):
+     * 1. Native library dir (/data/app/<pkg>/lib/<abi>/libbusybox.so) —
+     *    This is the PRIMARY method. Android extracts .so files from the APK
+     *    to a directory with an SELinux label that ALLOWS exec. This works
+     *    on ALL Android versions including 10+ with W^X enforcement.
+     * 2. filesDir/bin/busybox — FALLBACK only. Copied from APK assets + chmod.
+     *    This FAILS on Android 10+ with strict SELinux (e.g. Samsung, Xiaomi).
+     *    We keep it as a fallback for older Android versions or custom ROMs
+     *    that don't enforce W^X.
+     */
     fun busyBoxPath(): String? {
-        val f = File(binDir, BUSYBOX_BINARY)
-        if (!f.exists()) return null
-
+        // Use cached result if available
         if (busyboxVerified != null) {
-            return if (busyboxVerified!!) f.absolutePath else null
+            return if (busyboxVerified!!) cachedBusyboxPath else null
         }
 
-        if (!f.canExecute()) {
-            busyboxVerified = false
-            return null
+        // ── Strategy 1: Native library dir ──────────────────────────
+        nativeLibDir?.let { libDir ->
+            val nativeBusybox = File(libDir, BUSYBOX_NATIVE_LIB)
+            if (nativeBusybox.exists()) {
+                FileLogger.d(TAG, "Found libbusybox.so at ${nativeBusybox.absolutePath}")
+                if (tryExecBusybox(nativeBusybox.absolutePath)) {
+                    cachedBusyboxPath = nativeBusybox.absolutePath
+                    busyboxVerified = true
+                    FileLogger.i(TAG, "BusyBox verified at native lib: ${nativeBusybox.absolutePath}")
+                    return nativeBusybox.absolutePath
+                } else {
+                    FileLogger.w(TAG, "libbusybox.so exists but exec failed: ${nativeBusybox.absolutePath}")
+                }
+            } else {
+                FileLogger.w(TAG, "libbusybox.so not found in nativeLibDir: ${nativeBusybox.absolutePath}")
+            }
         }
 
+        // ── Strategy 2: filesDir/bin/busybox (fallback) ─────────────
+        val fallbackBusybox = File(binDir, BUSYBOX_BINARY)
+        if (fallbackBusybox.exists() && fallbackBusybox.canExecute()) {
+            if (tryExecBusybox(fallbackBusybox.absolutePath)) {
+                cachedBusyboxPath = fallbackBusybox.absolutePath
+                busyboxVerified = true
+                FileLogger.i(TAG, "BusyBox verified at fallback: ${fallbackBusybox.absolutePath}")
+                return fallbackBusybox.absolutePath
+            }
+        }
+
+        FileLogger.w(TAG, "BusyBox not available in any location")
+        busyboxVerified = false
+        return null
+    }
+
+    private var cachedBusyboxPath: String? = null
+
+    /** Try to exec busybox with a trivial command to verify it actually works. */
+    private fun tryExecBusybox(path: String): Boolean {
         return try {
-            val p = Runtime.getRuntime().exec(arrayOf(f.absolutePath, "true"))
-            p.waitFor()
-            busyboxVerified = true
-            FileLogger.i(TAG, "BusyBox verified at ${f.absolutePath}")
-            f.absolutePath
+            val p = Runtime.getRuntime().exec(arrayOf(path, "true"))
+            val exit = p.waitFor()
+            FileLogger.d(TAG, "tryExecBusybox($path) → exit $exit")
+            exit == 0
         } catch (e: Exception) {
-            FileLogger.w(TAG, "BusyBox at ${f.absolutePath} exists but cannot be executed: ${e.message}")
-            busyboxVerified = false
-            null
+            FileLogger.w(TAG, "tryExecBusybox($path) failed: ${e.message}")
+            false
         }
     }
 
     /**
      * Find the actual node binary inside the installed nodejs package.
      * Returns the absolute path if found, null otherwise.
-     *
-     * The Termux nodejs deb installs the binary at:
-     *   packages/nodejs/usr/bin/node
      */
     fun findNodeBinary(): String? {
         val candidates = listOf(
@@ -86,8 +135,8 @@ class OmniClawRuntimeManager(val context: Context) {
             File(packagesDir, "node/bin/node")
         )
         for (c in candidates) {
-            if (c.exists() && c.canExecute()) {
-                FileLogger.d(TAG, "Found node binary at ${c.absolutePath}")
+            if (c.exists()) {
+                FileLogger.d(TAG, "Found node binary at ${c.absolutePath} (canExecute=${c.canExecute()})")
                 return c.absolutePath
             }
         }
@@ -97,8 +146,6 @@ class OmniClawRuntimeManager(val context: Context) {
 
     /**
      * Find the node binary's lib directory (for LD_LIBRARY_PATH).
-     * The Termux nodejs deb puts shared libs at:
-     *   packages/nodejs/usr/lib
      */
     fun findNodeLibDir(): String? {
         val candidates = listOf(
@@ -116,11 +163,12 @@ class OmniClawRuntimeManager(val context: Context) {
 
     /**
      * Build a colon-separated LD_LIBRARY_PATH that includes all
-     * packages/[star]/usr/lib directories. This lets shared-lib-dependent
-     * binaries (node, git, python) find their libs at runtime.
+     * packages/[star]/usr/lib directories + the native lib dir.
      */
     fun buildLdLibraryPath(): String {
         val libs = mutableListOf<String>()
+        // Native lib dir first (for busybox's own deps if any)
+        nativeLibDir?.let { libs.add(it) }
         packagesDir.listFiles()?.forEach { pkgDir ->
             if (pkgDir.isDirectory) {
                 val usrLib = File(pkgDir, "usr/lib")
@@ -138,12 +186,15 @@ class OmniClawRuntimeManager(val context: Context) {
 
     /**
      * Build a PATH string that includes:
-     *  1. orbit_runtime/bin/ (for wrapper scripts and busybox)
-     *  2. Every packages/[star]/usr/bin/ (for actual binaries like node, git, python)
-     *  3. The system PATH
+     *  1. Native lib dir (for libbusybox.so — we symlink it as 'busybox')
+     *  2. orbit_runtime/bin/ (for wrapper scripts invoked via `sh <wrapper>`)
+     *  3. Every packages/[star]/usr/bin/ (for actual binaries like node, git)
+     *  4. The system PATH
      */
     fun buildPath(): String {
-        val paths = mutableListOf(binDir.absolutePath)
+        val paths = mutableListOf<String>()
+        nativeLibDir?.let { paths.add(it) }
+        paths.add(binDir.absolutePath)
         packagesDir.listFiles()?.forEach { pkgDir ->
             if (pkgDir.isDirectory) {
                 val usrBin = File(pkgDir, "usr/bin")
@@ -162,28 +213,47 @@ class OmniClawRuntimeManager(val context: Context) {
     }
 
     /**
-     * Install BusyBox from bundled APK assets. BusyBox provides ~300 POSIX tools
-     * in a single ~1MB binary, making Orbit-AI self-contained without Termux.
+     * Ensure BusyBox is available.
      *
-     * CRITICAL: BusyBox is a real BINARY (not a script), so it CAN be exec'd
-     * from app-private storage on Android 10+. This is why we use `busybox sh -c`
-     * instead of creating wrapper scripts (scripts CANNOT be exec'd).
+     * On Android 10+, the primary method is the native library (libbusybox.so)
+     * which is automatically extracted by the system to an exec-able directory.
+     * We also copy it to filesDir/bin/busybox as a fallback for older devices.
      *
      * This is safe to call repeatedly — it skips if already installed.
      *
      * @return true if BusyBox is available after the call
      */
     suspend fun installBusyBox(): Boolean = withContext(Dispatchers.IO) {
-        val busyboxFile = File(binDir, BUSYBOX_BINARY)
-
-        if (busyboxVerified == true && busyboxFile.exists()) {
+        // Check if native lib busybox is already verified
+        if (busyboxVerified == true) {
             return@withContext true
         }
 
+        // Try native lib first (no extraction needed — system already did it)
+        nativeLibDir?.let { libDir ->
+            val nativeBusybox = File(libDir, BUSYBOX_NATIVE_LIB)
+            if (nativeBusybox.exists()) {
+                FileLogger.i(TAG, "libbusybox.so found at ${nativeBusybox.absolutePath}")
+                if (tryExecBusybox(nativeBusybox.absolutePath)) {
+                    cachedBusyboxPath = nativeBusybox.absolutePath
+                    busyboxVerified = true
+                    FileLogger.i(TAG, "BusyBox ready via native library: ${nativeBusybox.absolutePath}")
+                    return@withContext true
+                } else {
+                    FileLogger.w(TAG, "libbusybox.so exec failed — falling back to asset extraction")
+                }
+            } else {
+                FileLogger.w(TAG, "libbusybox.so not found in $libDir — falling back to asset extraction")
+            }
+        }
+
+        // Fallback: extract from APK assets to filesDir/bin/busybox
+        // This may fail on Android 10+ with strict SELinux, but works on older devices.
         busyboxVerified = null
+        val busyboxFile = File(binDir, BUSYBOX_BINARY)
 
         try {
-            FileLogger.i(TAG, "Extracting BusyBox from APK assets...")
+            FileLogger.i(TAG, "Extracting BusyBox from APK assets (fallback)...")
             context.assets.open(BUSYBOX_ASSET).use { input ->
                 busyboxFile.outputStream().use { output ->
                     input.copyTo(output)
@@ -195,24 +265,18 @@ class OmniClawRuntimeManager(val context: Context) {
             val chmodExit = chmodResult.waitFor()
             FileLogger.d(TAG, "chmod 755 ${busyboxFile.absolutePath} → exit $chmodExit")
 
-            if (!busyboxFile.canExecute()) {
-                FileLogger.w(TAG, "canExecute()=false after chmod, trying cp+mv workaround...")
-                Runtime.getRuntime().exec(arrayOf(
-                    systemBin("sh"), "-c",
-                    "${systemBin("cp")} ${busyboxFile.absolutePath} ${busyboxFile.absolutePath}.tmp && " +
-                    "${systemBin("mv")} ${busyboxFile.absolutePath}.tmp ${busyboxFile.absolutePath} && " +
-                    "${systemBin("chmod")} 755 ${busyboxFile.absolutePath}"
-                )).waitFor()
-            }
-
-            val ok = busyboxFile.canExecute()
-            if (ok) {
-                FileLogger.i(TAG, "BusyBox installed and executable at ${busyboxFile.absolutePath}")
+            if (tryExecBusybox(busyboxFile.absolutePath)) {
+                cachedBusyboxPath = busyboxFile.absolutePath
+                busyboxVerified = true
+                FileLogger.i(TAG, "BusyBox ready via fallback: ${busyboxFile.absolutePath}")
+                true
             } else {
-                FileLogger.e(TAG, "BusyBox extracted but NOT executable — W^X enforcement may be blocking it. " +
-                    "File: ${busyboxFile.absolutePath}, canExecute=${busyboxFile.canExecute()}, canRead=${busyboxFile.canRead()}, canWrite=${busyboxFile.canWrite()}")
+                FileLogger.e(TAG, "BusyBox NOT executable from filesDir — SELinux W^X enforcement. " +
+                    "The native library (libbusybox.so) should be used instead but was not found. " +
+                    "Check that jniLibs/armeabi-v7a/libbusybox.so is in the APK.")
+                busyboxVerified = false
+                false
             }
-            ok
         } catch (e: Exception) {
             FileLogger.e(TAG, "BusyBox install failed: ${e.message}", e)
             false
