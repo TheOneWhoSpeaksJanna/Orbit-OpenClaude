@@ -95,12 +95,30 @@ class PRootRuntime(private val context: Context) {
             FileLogger.i(TAG, "Extracting Alpine rootfs from APK assets to ${rootfsDir.absolutePath}")
 
             rootfsDir.mkdirs()
-            val assetFile = context.assets.open("alpine-rootfs.tar.gz")
-            val tempArchive = File(tmpDir, "alpine-rootfs.tar.gz")
+
+            // Try both .tar.gz and .tar — AAPT2 may have decompressed the
+            // .tar.gz into a plain .tar (depending on noCompress config).
+            val assetStream = try {
+                FileLogger.d(TAG, "Trying alpine-rootfs.tar.gz...")
+                context.assets.open("alpine-rootfs.tar.gz")
+            } catch (e: Exception) {
+                FileLogger.d(TAG, "alpine-rootfs.tar.gz not found, trying alpine-rootfs.tar...")
+                try {
+                    context.assets.open("alpine-rootfs.tar")
+                } catch (e2: Exception) {
+                    FileLogger.e(TAG, "Neither alpine-rootfs.tar.gz nor alpine-rootfs.tar found in assets!")
+                    // List available assets for debugging
+                    val assets = context.assets.list("") ?: arrayOf()
+                    FileLogger.d(TAG, "Available assets: ${assets.joinToString(", ")}")
+                    throw e2
+                }
+            }
+
+            val tempArchive = File(tmpDir, "alpine-rootfs.tar")
             tempArchive.parentFile?.mkdirs()
 
             // Copy asset to temp file
-            assetFile.use { input ->
+            assetStream.use { input ->
                 FileOutputStream(tempArchive).use { output ->
                     input.copyTo(output)
                 }
@@ -108,11 +126,10 @@ class PRootRuntime(private val context: Context) {
 
             onProgress(0.3f, "Extracting rootfs archive...")
 
-            // Extract using Java's tar.gz support (no external tar needed)
-            val totalBytes = tempArchive.length()
-            var extractedBytes = 0L
-            java.util.zip.GZIPInputStream(tempArchive.inputStream()).use { gzip ->
-                org.apache.commons.compress.archivers.tar.TarArchiveInputStream(gzip).use { tis ->
+            // Extract: try gzip first (if the file is still .tar.gz),
+            // then fall back to plain tar (if AAPT2 decompressed it).
+            val extractRootfs: (java.io.InputStream) -> Unit = { input ->
+                org.apache.commons.compress.archivers.tar.TarArchiveInputStream(input).use { tis ->
                     var entry = tis.nextEntry
                     while (entry != null) {
                         val outFile = File(rootfsDir, entry.name)
@@ -128,10 +145,24 @@ class PRootRuntime(private val context: Context) {
                                 outFile.setExecutable(true, false)
                             }
                         }
-                        extractedBytes += entry.size
                         entry = tis.nextEntry
                     }
                 }
+            }
+
+            try {
+                // Try as gzip first
+                java.util.zip.GZIPInputStream(tempArchive.inputStream()).use { gzip ->
+                    extractRootfs(gzip)
+                }
+                FileLogger.d(TAG, "Extracted as gzip")
+            } catch (gzipEx: Exception) {
+                FileLogger.d(TAG, "Not gzip, trying as plain tar: ${gzipEx.message}")
+                // Fall back to plain tar
+                tempArchive.inputStream().use { plain ->
+                    extractRootfs(plain)
+                }
+                FileLogger.d(TAG, "Extracted as plain tar")
             }
 
             tempArchive.delete()
@@ -155,11 +186,13 @@ class PRootRuntime(private val context: Context) {
             File(rootfsDir, "agents").mkdirs()
             File(rootfsDir, "workspace").mkdirs()
 
-            onProgress(0.8f, "Rootfs configured. Installing nodejs, npm, git...")
+            onProgress(0.8f, "Rootfs configured. Installing nodejs, npm, git, gh, python3...")
 
-            // Install nodejs, npm, git inside the rootfs via apk
+            // Install all base packages inside the rootfs via apk.
+            // These are the "basic needs" pre-installed so the user doesn't
+            // have to wait for individual installs.
             val installResult = executeInRootfs(
-                "apk update && apk add --no-cache nodejs npm git gh",
+                "apk update && apk add --no-cache nodejs npm git gh python3 py3-pip curl wget openssh-client make gcc g++",
                 "",
                 workingDir = "/root"
             )
@@ -170,7 +203,7 @@ class PRootRuntime(private val context: Context) {
                 return@withContext false
             }
 
-            onProgress(1.0f, "Rootfs ready with nodejs, npm, git, gh")
+            onProgress(1.0f, "Rootfs ready with nodejs, npm, git, gh, python3, pip, curl, wget, ssh, make, gcc")
             FileLogger.i(TAG, "Rootfs installation complete")
             true
         } catch (e: Exception) {

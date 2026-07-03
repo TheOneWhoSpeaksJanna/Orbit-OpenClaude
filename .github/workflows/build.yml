@@ -30,7 +30,7 @@ jobs:
         path: |
           $ANDROID_HOME/platforms/android-36
           $ANDROID_HOME/build-tools/36.0.0
-        key: android-sdk-${{ runner.os }}
+        key: android-sdk-36-${{ runner.os }}
 
     - name: Install Android SDK components
       if: steps.cache-android-sdk.outputs.cache-hit != 'true'
@@ -42,11 +42,8 @@ jobs:
       with:
         cache-read-only: ${{ github.event_name != 'push' }}
 
-    - name: Build debug APKs (all flavors)
-      run: ./gradlew assembleDebug --no-daemon
-
-    - name: Run unit tests
-      run: ./gradlew testNormalDebugUnitTest --no-daemon
+    - name: Build debug APKs (all flavors) + run tests
+      run: ./gradlew assembleDebug testNormalDebugUnitTest --no-daemon --parallel
 
     - name: Collect APKs
       run: |

@@ -147,12 +147,18 @@ android {
   }
 
   // Extract native libraries (.so files) from the APK to the filesystem.
-  // This is REQUIRED for libbusybox.so to be exec'able — without it, the
-  // .so stays inside the APK and can't be exec'd.
+  // This is REQUIRED for libbusybox.so and libproot.so to be exec'able.
   packaging {
     jniLibs {
       useLegacyPackaging = true
     }
+  }
+
+  // Prevent AAPT2 from decompressing .tar.gz assets. Without this,
+  // AAPT2 decompresses alpine-rootfs.tar.gz into alpine-rootfs.tar
+  // (9MB instead of 3.9MB) and the code can't find it by name.
+  androidResources {
+    noCompress += listOf("tar.gz", "tar", "gz")
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
 

@@ -219,10 +219,29 @@ class TermuxViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            // Ensure BusyBox is available for command execution
-            appContainer.runtimeManager.installBusyBox()
+            // ── NEW: Execute inside the PRoot Alpine environment ─────────
+            // The terminal now runs commands inside the Alpine Linux rootfs
+            // via PRoot, giving the user a REAL Linux shell with node, git,
+            // python, etc. — not the limited Android shell.
+            val prootRuntime = appContainer.prootRuntime
 
-            val executionResult = appContainer.localCommandRunner.executeCommand(trimmed)
+            // Ensure rootfs is installed
+            if (!prootRuntime.isRootfsInstalled) {
+                repository.insertTermuxLog(
+                    TermuxLog(
+                        id = java.util.UUID.randomUUID().toString(),
+                        command = trimmed,
+                        output = "Initializing Linux environment (first launch, ~30s)...",
+                        exitCode = -1,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+                prootRuntime.installRootfs { progress, status ->
+                    FileLogger.d(TAG, "Rootfs install: $progress — $status")
+                }
+            }
+
+            val executionResult = prootRuntime.executeInRootfs(trimmed, "")
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),
                 command = trimmed,
@@ -237,6 +256,7 @@ class TermuxViewModel(
     fun executePrivilegedCommand(command: String) {
         FileLogger.i(TAG, "executePrivilegedCommand: '$command'")
         viewModelScope.launch(Dispatchers.IO) {
+            // Sudo commands use Shizuku (Android system-level access)
             val executionResult = appContainer.localCommandRunner.executePrivilegedCommand(command)
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),
