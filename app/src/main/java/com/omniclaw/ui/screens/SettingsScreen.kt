@@ -81,8 +81,9 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
