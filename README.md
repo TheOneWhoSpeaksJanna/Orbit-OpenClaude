@@ -1,118 +1,111 @@
 # Orbit-AI
 
-On-device Android workspace for AI agents. Self-contained runtime — no Termux required.
+A portable Android app that turns AI coding agents (OpenClaude, OpenCode, Claude Code, Codex) into pocket-sized, on-device tools. No Termux, no root, no laptop required.
+
+## How it works
+
+Orbit-AI bundles a **complete Alpine Linux environment** inside the APK and runs it via **PRoot** — a user-space `chroot` replacement that needs no root privileges. Agents run inside this Linux environment where they have access to `node`, `npm`, `git`, `gh`, and a standard filesystem layout.
+
+```
+┌─────────────────────────────────────────┐
+│            Orbit-AI APK                  │
+│                                         │
+│  ┌─────────────┐  ┌──────────────────┐  │
+│  │  Jetpack     │  │  libproot.so     │  │
+│  │  Compose UI  │  │  (402KB static)   │  │
+│  │  (the app)   │  └────────┬─────────┘  │
+│  └──────┬───────┘           │            │
+│         │                   ▼            │
+│  ┌──────▼───────────────────────────┐    │
+│  │     PRoot Alpine Linux           │    │
+│  │  ┌─────────────────────────────┐ │    │
+│  │  │ /usr/bin/node  /usr/bin/git │ │    │
+│  │  │ /usr/bin/npm   /usr/bin/gh  │ │    │
+│  │  │ /agents/  /workspace/       │ │    │
+│  │  │ /sdcard/ (Android storage)  │ │    │
+│  │  └─────────────────────────────┘ │    │
+│  └──────────────────────────────────┘    │
+│                                         │
+│  Bundled assets:                        │
+│   • alpine-rootfs.tar.gz (3.9MB)        │
+│   • skills/android-environment.md       │
+│   • 4 pre-installed agents              │
+└─────────────────────────────────────────┘
+```
 
 ## Features
 
-- **Self-contained POSIX runtime** — BusyBox bundled in APK (~1MB) provides `sh`, `cp`, `mv`, `tar`, `grep`, `wget`, and 40+ other tools without needing Termux.
-- **Multiple agent presets** — Choose from different AI agent configurations shipped as APK flavors: `normal`, `opencode`, `openclaude`, `claudecode`, `codex`. Each with its own app label and agent defaults.
-- **Agent installation from assets or GitHub** — Agents are bundled as tarballs in APK assets or downloaded from GitHub Releases on first setup.
-- **Package manager** — Built-in package installer downloads and manages runtimes (node, python, git) with registry-based tracking.
-- **Local command execution** — Agents run locally on-device via a shell-based command runner with isolated runtime environment.
-- **7 supported AI providers** — Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq, and Ollama (local). Configure API keys in-app; all endpoints are centralized in `core/config/ApiConfig.kt`.
-- **Optional Shizuku elevation** — Root-level commands via Shizuku when available.
-- **Auto-updates** — In-app update system that checks GitHub Releases for new APKs and installs them via FileProvider.
-- **Logging** — All logs written to `/storage/emulated/0/omniclaw_logs/` (or app-private fallback); crashes also saved to `Downloads/omniclaw_logs/`.
-
-## APK Flavors
-
-The project builds 5 product flavors, each targeting a different agent ecosystem:
-
-| Flavor       | App Label        | Agent Preset   | Fallback GitHub repo |
-|--------------|------------------|----------------|----------------------|
-| `normal`     | Orbit AI         | Default        | `Gitlawb/openclaude` |
-| `opencode`   | OpenCode         | OpenCode       | (npm only — no fallback) |
-| `openclaude` | OpenClaude       | OpenClaude     | `Gitlawb/openclaude` |
-| `claudecode` | Claude Code      | Claude Code    | (npm only — no fallback) |
-| `codex`      | Codex            | Codex          | (npm only — no fallback) |
-
-Build a specific flavor:
-```bash
-./gradlew assembleOpenclaudeDebug
-./gradlew assembleOpenclaudeRelease
-```
-
-The CI workflow builds all 5 flavors and creates a GitHub Release with 5 APK artifacts.
-
-## Configurable Build Constants
-
-The following Gradle project properties override baked-in defaults — set them
-in `~/.gradle/gradle.properties` (per-user) or via `-P<key>=<value>` (per-build)
-without editing source:
-
-| Property | Default | Description |
-|----------|---------|-------------|
-| `orbit.openRouterReferrerUrl` | `https://github.com/TheOneWhoSpeaksJanna/Orbit-AI` | Sent as `HTTP-Referer` to OpenRouter |
-| `orbit.openRouterAppTitle`    | `Orbit AI` | Sent as `X-Title` to OpenRouter |
-| `orbit.agentFallbackRepoUrl`  | `https://github.com/Gitlawb/openclaude.git` | GitHub repo used as fallback when APK assets don't bundle an agent tarball |
-
-Per-flavor overrides for `AGENT_FALLBACK_REPO_URL` are set in `app/build.gradle.kts`.
+- **Full Linux environment** — Alpine Linux 3.20 with `node`, `npm`, `git`, `gh` pre-installed. Agents can `apk add` any additional packages they need.
+- **4 pre-bundled agents** — OpenClaude, OpenCode, Claude Code, Codex. Ready to use on first launch.
+- **7 AI providers** — Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq, Ollama. Configure API keys in-app.
+- **Shizuku integration** — Agents can execute system-level commands (brightness, WiFi, app launch, screenshots) via Shizuku when available.
+- **Android-aware agents** — A built-in skill (`android-environment.md`) tells agents exactly how to use their environment: filesystem layout, Shizuku commands, file access rules, etc.
+- **Copy from terminal** — Long-press any terminal output to copy it. Copy icon on every log card.
+- **Expert logging** — Every operation logged to file + logcat. Settings → Diagnostics shows the log path.
+- **Optimized for low-end devices** — Clean Material 3 UI with no expensive blur effects. Runs smoothly on 2GB RAM devices.
 
 ## Architecture
 
-```
-app/src/main/java/com/omniclaw/
-├── core/
-│   ├── config/        # FlavorConfig, ApiConfig (centralized API URLs/endpoints)
-│   ├── logging/       # FileLogger (writes to omniclaw_logs/)
-│   └── di/            # Dependency injection
-├── ui/
-│   ├── screens/       # Compose UI screens (Chat, Setup, Settings, Dashboard, Providers)
-│   └── viewmodels/    # ViewModels for reactive state
-├── data/
-│   ├── api/
-│   │   ├── providers/ # One provider class per AI service (Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq, Ollama)
-│   │   └── tools/     # Tool-call implementations
-│   ├── local/
-│   │   ├── runtime/   # PackageInstaller, OrbitRuntimeManager (BusyBox bootstrap)
-│   │   ├── runner/    # LocalCommandRunner (sh-based execution)
-│   │   ├── entity/    # Room entities
-│   │   └── dao/       # Room DAOs
-│   └── repository/    # Repository implementations
-└── domain/            # Domain models, interfaces
-```
+### PRoot Runtime
 
-The bundled package registry lives at `app/src/main/assets/packages.default.json`
-and is copied to `orbit_runtime/registry/packages.json` on first launch. Edit
-the runtime copy to pin newer package versions without an app update.
+The core innovation is using **PRoot** instead of wrapper scripts or shared-library hacks:
 
-## Runtime
+| Approach | Works? | Why |
+|----------|--------|-----|
+| Wrapper scripts in filesDir | No | SELinux W^X blocks exec of scripts |
+| Termux debs (shared libs) | Fragile | Dependency hell, stale URLs |
+| **PRoot + Alpine rootfs** | **Yes** | PRoot is a real binary (exec'd from nativeLibDir), agents run inside a full Linux env |
 
-Orbit-AI does **not** depend on Termux. The app includes a BusyBox ARM64 binary extracted at setup time, providing a POSIX environment with `sh`, `cp`, `mv`, `tar`, `grep`, `wget`, `sed`, `awk`, and more. The runtime directory lives at:
+PRoot uses `ptrace` to intercept syscalls and translate paths — no root, no `chroot`, no `mount` needed. It works on all Android 7+ devices.
+
+### Filesystem Layout
+
+Inside the PRoot environment, agents see:
 
 ```
-/data/data/<package>/files/orbit_runtime/
-├── bin/          # BusyBox + wrappers + agent entry points
-├── tmp/
-├── packages/     # Installed runtimes (node, python, git, ...)
-├── downloads/
-├── agents/       # Extracted agent code
-├── logs/
-├── registry/     # packages.json (editable runtime copy of the bundled registry)
-└── environments/
+/                    — Alpine Linux rootfs
+├── usr/bin/node     — Node.js runtime
+├── usr/bin/npm      — npm package manager
+├── usr/bin/git      — Git
+├── usr/bin/gh       — GitHub CLI
+├── agents/          — Agent code (bind-mounted)
+├── workspace/       — User workspace (bind-mounted)
+├── tmp/             — Temp files (bind-mounted)
+├── sdcard/          — Android external storage
+├── root/            — Home directory
+└── etc/             — Config files (resolv.conf, apk/repositories)
 ```
 
-PATH is automatically set to include `orbit_runtime/bin/` for all local command execution. System shell + chmod paths are resolved via `ANDROID_ROOT` so the app works on custom ROMs that mount `/system` elsewhere.
+### Agent Execution
 
-## Setup Flow
+When you send a message to an agent:
 
-1. App launches → Setup Wizard
-2. User configures agent type and API keys (if using API-based agents)
-3. For local agents: BusyBox is installed from APK assets → agent tarball is extracted or downloaded
-4. Agent wrapper scripts are created in `orbit_runtime/bin/`
-5. Chat interface opens — messages are piped to the local agent process
+1. `ChatViewModel` calls the agent's wrapper script
+2. The wrapper sets `PROOT_LOADER` + `PROOT_NO_SECCOMP` env vars
+3. The wrapper execs `libproot.so` with `--rootfs=.../alpine-rootfs`
+4. PRoot starts, intercepts syscalls, translates paths
+5. Inside the container: `/usr/bin/node /agents/openclaude/cli.js`
+6. Agent runs with full Linux compatibility
+7. Output is captured and returned to the UI
 
-## Logging
+## APK Flavors
 
-Logs are written to `/storage/emulated/0/omniclaw_logs/` when "All files access" is granted (Settings → Apps → Orbit-AI → All files access). Without this permission, logs fall back to the app's private external files directory.
+| Flavor | Agent | App Label |
+|--------|-------|-----------|
+| `normal` | Default | Orbit AI |
+| `openclaude` | OpenClaude | Orbit + OpenClaude |
+| `opencode` | OpenCode | Orbit + OpenCode |
+| `claudecode` | Claude Code | Orbit + Claude Code |
+| `codex` | Codex | Orbit + Codex |
 
-- Daily log files: `app_YYYY-MM-DD.log`
-- Crash reports: `crash_YYYYMMDD_HHmmss.log`
-- Old logs are auto-cleaned (7 daily logs, 10 crash reports retained)
+```bash
+./gradlew assembleOpenclaudeDebug   # Build one flavor
+./gradlew assembleDebug             # Build all flavors
+```
 
 ## Building
 
-Prerequisites: Android SDK, JDK 17+, Gradle (wrapped).
+Prerequisites: Android SDK 36, JDK 21+.
 
 ```bash
 git clone https://github.com/TheOneWhoSpeaksJanna/Orbit-AI.git
@@ -120,20 +113,42 @@ cd Orbit-AI
 ./gradlew assembleNormalDebug
 ```
 
-For a release build, configure signing in `app/build.gradle.kts` or use CI.
+The APK will include:
+- `lib/arm64-v8a/libproot.so` — PRoot binary (402KB)
+- `lib/arm64-v8a/libproot_loader.so` — PRoot loader (18KB)
+- `assets/alpine-rootfs.tar.gz` — Alpine Linux rootfs (3.9MB)
+- `assets/skills/android-environment.md` — Agent awareness skill
+
+## First Launch Flow
+
+1. App starts → Setup Wizard
+2. User selects agent + provider + API key
+3. App extracts Alpine rootfs from APK assets (3.9MB → 8.9MB extracted)
+4. App runs `apk add nodejs npm git gh` inside PRoot (first launch only, ~30s)
+5. App installs the selected agent via `npm install` inside PRoot
+6. App creates a wrapper script that runs the agent via PRoot
+7. Chat opens — messages are piped to the agent via the PRoot wrapper
+
+## Logging
+
+Logs go to both file and logcat:
+
+- **File**: Settings → Diagnostics shows the path (usually `/storage/emulated/0/Android/data/<pkg>/files/omniclaw_logs/`)
+- **Logcat**: `adb logcat -s OmniClaw` shows real-time logs
+
+Log levels: `I` (info), `W` (warnings), `E` (errors), `D` (debug). Every command execution, package install, and agent run is logged with full context.
+
+## Security
+
+- PRoot runs as the app's unprivileged UID — no privilege escalation
+- Agents are sandboxed inside the app's data directory
+- SUDO commands via Shizuku require explicit user approval per command
+- API keys stored via `androidx.security.crypto` (encrypted SharedPreferences)
 
 ## CI/CD
 
-The GitHub Actions workflow (`.github/workflows/build.yml`):
-- Builds all 5 flavors on push to `main` and on pull requests
-- Runs unit tests on pull requests
-- Uploads APKs as CI artifacts (30-day retention)
-- Auto-creates a GitHub Release with all APKs on push to `main`
-
-## Security Notes
-
-- API keys (Claude, OpenAI, Gemini, OpenRouter, DeepSeek, Groq) are stored in user preferences — not hardcoded. Ollama uses no auth; its key slot stores an optional base URL.
-- All AI provider URLs live in `core/config/ApiConfig.kt` — no scattered URL string literals.
-- Agent code runs in-app with the same UID as the app itself.
-- BusyBox wrappers use `#!/system/bin/sh` shebang (resolved via `ANDROID_ROOT`) to avoid external shell dependencies.
-- Fork-friendly build constants (`orbit.*` Gradle properties) let you rebrand without touching source.
+GitHub Actions (`.github/workflows/build.yml`):
+- Builds all 5 flavors on push to `main` and on PRs
+- Runs unit tests on PRs
+- Uploads APKs as artifacts (30-day retention)
+- Auto-creates a GitHub Release on push to `main`
