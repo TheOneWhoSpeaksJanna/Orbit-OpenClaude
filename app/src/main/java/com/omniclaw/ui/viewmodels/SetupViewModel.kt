@@ -152,6 +152,17 @@ private val AGENT_WRAPPER_NAMES = mapOf(
     AGENT_OPENCODE to "lildax"
 )
 
+/**
+ * NPM package names for each agent. Used to install the agent via npm
+ * inside the PRoot Alpine environment.
+ */
+private val NPM_PACKAGES = mapOf(
+    AGENT_OPENCLAUDE to "@gitlawb/openclaude",
+    AGENT_CLAUDE_CODE to "@anthropic-ai/claude-code",
+    AGENT_OPENCODE to "@opencode-ai/cli",
+    AGENT_CODEX to "@openai/codex"
+)
+
 private val SYSTEM_PROMPTS = mapOf(
     AGENT_HERMES to """You are Hermes, a local execution agent with Shizuku root access. You can control the Android device.
 
@@ -204,7 +215,8 @@ class SetupViewModel(
     private val aiProvider: AiProvider,
     private val localCommandRunner: LocalCommandRunner,
     private val runtimeManager: OmniClawRuntimeManager,
-    private val packageInstaller: PackageInstaller
+    private val packageInstaller: PackageInstaller,
+    private val appContainer: com.omniclaw.core.di.AppContainer
 ) : ViewModel() {
 
     private val _currentStep = MutableStateFlow(0)
@@ -363,25 +375,50 @@ class SetupViewModel(
             ))
 
             try {
-                // Ensure POSIX runtime (BusyBox) is available before agent setup
-                runtimeManager.installBusyBox()
-
+                // ── NEW ARCHITECTURE: Use PRoot + Alpine rootfs ──────────
+                // The PRoot environment has node, npm, git pre-installed.
+                // Agents are installed via npm inside the rootfs and run
+                // via proot, giving them a full Linux environment.
                 updateInstallState(agentName, status = STATUS_CHECKING)
-                withContext(Dispatchers.IO) {
-                    localCommandRunner.executeCommand(
-                        "mkdir -p ${runtimeManager.agentsDir.absolutePath} ${binDir.absolutePath}"
-                    )
+
+                val prootRuntime = appContainer.prootRuntime
+
+                // Ensure rootfs is installed (extracts Alpine + installs node/npm/git)
+                if (!prootRuntime.isRootfsInstalled) {
+                    updateInstallState(agentName, progress = 0.1f, status = "Installing Linux environment...")
+                    val rootfsOk = prootRuntime.installRootfs { progress, status ->
+                        updateInstallState(agentName, progress = progress * 0.5f, status = status)
+                    }
+                    if (!rootfsOk) {
+                        throw IllegalStateException("Failed to install Linux rootfs environment")
+                    }
                 }
 
-                // Ensure Node.js is available — agents need it for npm install/build and wrapper script
-                ensureNodeJs()
+                updateInstallState(agentName, progress = 0.5f, status = "$STATUS_DOWNLOADING$agentName...")
 
-                // Try extracting from bundled assets first, fall back to GitHub download
+                // Install the agent via npm inside the PRoot environment
+                val npmPackage = NPM_PACKAGES[agentName]
+                if (npmPackage != null) {
+                    // Create agents directory inside rootfs
+                    prootRuntime.executeInRootfs("mkdir -p /agents/$targetDirName", "")
+
+                    // npm install the agent package
+                    updateInstallState(agentName, progress = 0.6f, status = STATUS_INSTALLING_DEPS)
+                    val installResult = prootRuntime.executeInRootfs(
+                        "cd /agents/$targetDirName && npm init -y && npm install $npmPackage",
+                        ""
+                    )
+                    if (installResult.exitCode != 0) {
+                        FileLogger.w("SetupViewModel", "npm install warning: ${installResult.output.take(200)}")
+                    }
+                }
+
+                // Also try extracting from bundled assets (for offline use)
                 val installedFromAssets = withContext(Dispatchers.IO) {
                     tryInstallFromAssets(agentName, targetDir, binDir, wrapperName, wrapperFile)
                 }
 
-                if (!installedFromAssets) {
+                if (!installedFromAssets && npmPackage == null) {
                     updateInstallState(agentName, progress = 0.1f, status = "$STATUS_DOWNLOADING$agentName...")
 
                     if (targetDir.exists()) {
@@ -389,8 +426,6 @@ class SetupViewModel(
                     }
 
                     // The fallback GitHub repo URL is flavor-specific (per BuildConfig).
-                    // If empty (e.g. opencode/codex/claude-code, which ship as npm packages),
-                    // there is no GitHub fallback and the install fails gracefully.
                     val fallbackRepoUrl = ApiConfig.AGENT_FALLBACK_REPO_URL
                     if (fallbackRepoUrl.isBlank()) {
                         throw IllegalStateException(
@@ -455,80 +490,62 @@ class SetupViewModel(
                             )
                         } catch (_: Exception) { }
                     }
+                }
 
-                    updateInstallState(agentName, progress = 0.9f, status = STATUS_CREATING_SCRIPT)
+                // ── Create wrapper script that uses PRoot ─────────────────
+                // The wrapper calls proot to run the agent inside the Alpine
+                // rootfs, where node is at /usr/bin/node and all shared libs
+                // are available. This is the RELIABLE path.
+                updateInstallState(agentName, progress = 0.9f, status = STATUS_CREATING_SCRIPT)
 
-                    val entryPoint = DIST_CANDIDATES.firstOrNull { File(targetDir, it).exists() } ?: "index.js"
+                val entryPoint = DIST_CANDIDATES.firstOrNull { File(targetDir, it).exists() } ?: "index.js"
+                val prootBinary = appContainer.prootRuntime.prootBinary
+                val prootLoader = appContainer.prootRuntime.prootLoader
+                val rootfsPath = appContainer.prootRuntime.rootfsDir.absolutePath
+                val agentsPath = appContainer.prootRuntime.agentsDir.absolutePath
+                val workspacePath = appContainer.prootRuntime.workspaceDir.absolutePath
+                val tmpPath = appContainer.prootRuntime.tmpDir.absolutePath
 
-                    // CRITICAL: Create a RESILIENT wrapper that searches for node at RUNTIME.
-                    //
-                    // Previous versions hardcoded the node binary path at wrapper creation
-                    // time — but if node wasn't installed yet (e.g. ensureNodeJs failed
-                    // due to a 404), the wrapper was never created, and the user got
-                    // "No such file or directory" when trying to use the agent.
-                    //
-                    // This wrapper searches for node in multiple locations at RUNTIME,
-                    // so it works even if node is installed AFTER the wrapper is created.
-                    // The wrapper is always created — no exceptions.
-                    val runtimeDirPath = runtimeManager.runtimeDir.absolutePath
-                    val packagesDirPath = runtimeManager.packagesDir.absolutePath
-                    val binDirPath = runtimeManager.binDir.absolutePath
-                    val wrapperScript = """
+                val wrapperScript = """
 #!${SYSTEM_SH}
 # Orbit-AI agent wrapper for $agentName
-# Auto-generated — searches for node at runtime so it works even if
-# nodejs is installed AFTER this wrapper was created.
-RUNTIME_DIR="$runtimeDirPath"
-AGENT_ENTRY="${targetDir.absolutePath}/${entryPoint}"
+# Runs the agent inside a PRoot Alpine Linux environment where node,
+# npm, git, and all shared libraries are properly installed.
+export PROOT_LOADER="$prootLoader"
+export PROOT_NO_SECCOMP=1
+export PROOT_TMP_DIR="$tmpPath"
+export HOME="/root"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export TERM="xterm-256color"
+export LANG="C.UTF-8"
+unset LD_PRELOAD
 
-# Search for the node binary in priority order
-NODE=""
-for candidate in \
-    "$packagesDirPath/nodejs/usr/bin/node" \
-    "$packagesDirPath/node/bin/node" \
-    "$packagesDirPath/nodejs/bin/node" \
-    "$${'$'}(command -v node 2>/dev/null)" \
-    "/system/bin/node"; do
-    if [ -x "$${'$'}candidate" ]; then
-        NODE="$${'$'}candidate"
-        break
-    fi
-done
+exec "$prootBinary" \
+    --kill-on-exit \
+    --rootfs="$rootfsPath" \
+    --cwd="/root" \
+    --change-id=0:0 \
+    --bind=/dev \
+    --bind=/proc \
+    --bind=/sys \
+    --bind=/sdcard:/sdcard \
+    --bind="$agentsPath:/agents" \
+    --bind="$workspacePath:/workspace" \
+    --bind="$tmpPath:/tmp" \
+    -- /usr/bin/node "/agents/$targetDirName/$entryPoint" "${'$'}@"
+                """.trimIndent()
 
-if [ -z "$${'$'}NODE" ]; then
-    echo "ERROR: Node.js binary not found." >&2
-    echo "Install it by running: omniclaw-pkg install nodejs" >&2
-    echo "Searched in:" >&2
-    echo "  $packagesDirPath/nodejs/usr/bin/node" >&2
-    echo "  $packagesDirPath/node/bin/node" >&2
-    echo "  PATH (command -v node)" >&2
-    exit 1
-fi
-
-# Set LD_LIBRARY_PATH so node finds its shared libs
-NODE_LIB_DIR="$packagesDirPath/nodejs/usr/lib"
-if [ -d "$${'$'}NODE_LIB_DIR" ]; then
-    export LD_LIBRARY_PATH="$${'$'}NODE_LIB_DIR:$${'$'}LD_LIBRARY_PATH"
-fi
-
-export PATH="$binDirPath:$${'$'}PATH"
-export HOME="$runtimeDirPath"
-export TMPDIR="$runtimeDirPath/tmp"
-
-exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
-                    """.trimIndent()
-
-                    withContext(Dispatchers.IO) {
-                        wrapperFile.parentFile?.mkdirs()
-                        wrapperFile.writeText(wrapperScript)
-                        FileLogger.i("SetupViewModel", "Agent wrapper written to ${wrapperFile.absolutePath}:\n$wrapperScript")
-                        makeExecutable(wrapperFile)
-                    }
+                withContext(Dispatchers.IO) {
+                    wrapperFile.parentFile?.mkdirs()
+                    wrapperFile.writeText(wrapperScript)
+                    FileLogger.i("SetupViewModel", "Agent wrapper written to ${wrapperFile.absolutePath}:\n$wrapperScript")
+                    makeExecutable(wrapperFile)
                 }
 
                 updateInstallState(agentName, progress = 1f, status = "$agentName$STATUS_INSTALLED", isInstalled = true)
 
             } catch (e: Exception) {
+                FileLogger.e("SetupViewModel", "Agent install failed: ${e.message}", e)
                 updateInstallState(agentName, status = "$STATUS_FAILED${e.message}", isInstalled = false)
             } finally {
                 _agentInstallStates.value = _agentInstallStates.value + (agentName to _agentInstallStates.value[agentName]!!.copy(isInstalling = false))
@@ -758,7 +775,8 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
                     application.container.aiProvider,
                     application.container.localCommandRunner,
                     application.container.runtimeManager,
-                    application.container.packageInstaller
+                    application.container.packageInstaller,
+                    application.container
                 ) as T
             }
         }
