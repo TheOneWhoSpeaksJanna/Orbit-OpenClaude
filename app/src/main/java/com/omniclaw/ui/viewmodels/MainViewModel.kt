@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.data.local.prefs.PreferencesManager
-import com.omniclaw.ui.theme.OmniClawThemeMode
+import com.omniclaw.ui.theme.OrbitThemeMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -32,18 +32,18 @@ class MainViewModel(
             initialValue = null
         )
 
-    val themeMode: StateFlow<OmniClawThemeMode> = prefsManager.themeMode
+    val themeMode: StateFlow<OrbitThemeMode> = prefsManager.themeMode
         .map { raw ->
             when {
-                raw.equals(THEME_DARK, ignoreCase = true) -> OmniClawThemeMode.DARK
-                raw.equals(THEME_LIGHT, ignoreCase = true) -> OmniClawThemeMode.LIGHT
-                else -> OmniClawThemeMode.SYSTEM
+                raw.equals(THEME_DARK, ignoreCase = true) -> OrbitThemeMode.DARK
+                raw.equals(THEME_LIGHT, ignoreCase = true) -> OrbitThemeMode.LIGHT
+                else -> OrbitThemeMode.SYSTEM
             }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
-            initialValue = OmniClawThemeMode.SYSTEM
+            initialValue = OrbitThemeMode.SYSTEM
         )
 
     companion object {

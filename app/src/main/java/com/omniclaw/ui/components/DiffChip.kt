@@ -14,7 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.omniclaw.ui.theme.OmniClawColors
+import com.omniclaw.ui.theme.OrbitSuccess
+import com.omniclaw.ui.theme.OrbitWarning
+
 
 private const val CHIP_SHAPE_RADIUS_DP = 6
 private const val CHIP_HORIZONTAL_PADDING_DP = 10
@@ -35,7 +37,7 @@ fun DiffChip(
 
     val insertions = Regex("(\\d+) \\+").find(stats)?.groupValues?.get(1)?.toIntOrNull() ?: 0
     val deletions = Regex("(\\d+) -").find(stats)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-    val extended = OmniClawColors.current
+    
 
     Row(
         modifier = modifier
@@ -55,7 +57,7 @@ fun DiffChip(
             if (insertions > 0 || deletions == 0) {
                 Text(
                     text = "+$insertions",
-                    color = extended.success,
+                    color = OrbitSuccess,
                     fontSize = CHIP_FONT_SIZE_SP.sp,
                     fontWeight = FontWeight.SemiBold
                 )

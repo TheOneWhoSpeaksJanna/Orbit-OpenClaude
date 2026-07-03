@@ -30,12 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omniclaw.domain.models.TermuxLog
-import com.omniclaw.ui.theme.OmniClawAccent
-import com.omniclaw.ui.theme.OmniClawError
-import com.omniclaw.ui.theme.OmniClawSuccess
-import com.omniclaw.ui.theme.OmniClawSurfaceDark
-import com.omniclaw.ui.theme.OmniClawTextPrimary
-import com.omniclaw.ui.theme.OmniClawTextSecondary
+import com.omniclaw.ui.theme.OrbitSuccess
+import com.omniclaw.ui.theme.OrbitError
 
 private const val BLOCK_SHAPE_RADIUS_DP = 8
 private const val BLOCK_PADDING_DP = 10
@@ -66,7 +62,7 @@ fun TerminalBlock(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(BLOCK_SHAPE_RADIUS_DP.dp))
-            .background(OmniClawSurfaceDark)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { expanded = !expanded }
             .padding(BLOCK_PADDING_DP.dp)
     ) {
@@ -74,13 +70,13 @@ fun TerminalBlock(
             Icon(
                 imageVector = if (isError) Icons.Default.Error else Icons.Default.CheckCircle,
                 contentDescription = null,
-                tint = if (isError) OmniClawError else OmniClawSuccess,
+                tint = if (isError) OrbitError else OrbitSuccess,
                 modifier = Modifier.size(ICON_SIZE_DP.dp)
             )
             Spacer(Modifier.size(SPACER_SIZE_DP.dp))
             Text(
                 text = "${log.exitCode}",
-                color = if (isError) OmniClawError else OmniClawSuccess,
+                color = if (isError) OrbitError else OrbitSuccess,
                 fontSize = STATUS_FONT_SIZE_SP.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -89,7 +85,7 @@ fun TerminalBlock(
                 text = "\$ ${log.command}",
                 fontFamily = FontFamily.Monospace,
                 fontSize = COMMAND_FONT_SIZE_SP.sp,
-                color = OmniClawAccent,
+                color = MaterialTheme.colorScheme.tertiary,
                 maxLines = 1
             )
         }
@@ -97,7 +93,7 @@ fun TerminalBlock(
         Text(
             text = preview.ifEmpty { if (isError) MESSAGE_COMMAND_FAILED else MESSAGE_NO_OUTPUT },
             style = MaterialTheme.typography.bodySmall,
-            color = OmniClawTextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontFamily = FontFamily.Monospace,
             fontSize = PREVIEW_FONT_SIZE_SP.sp,
             maxLines = if (expanded) Int.MAX_VALUE else 2
@@ -106,7 +102,7 @@ fun TerminalBlock(
             Text(
                 text = log.output.ifEmpty { MESSAGE_EMPTY },
                 style = MaterialTheme.typography.bodySmall,
-                color = OmniClawTextPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontFamily = FontFamily.Monospace,
                 fontSize = EXPANDED_FONT_SIZE_SP.sp,
                 modifier = Modifier.padding(top = EXPANDED_TOP_PADDING_DP.dp)

@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omniclaw.core.di.ToolCallRecord
 import com.omniclaw.domain.models.TermuxLog
-import com.omniclaw.ui.theme.OmniClawColors
+import com.omniclaw.ui.theme.OrbitSuccess
+import com.omniclaw.ui.theme.OrbitWarning
+
 
 private const val SECTION_SPACING_DP = 10
 private const val CARD_PADDING_DP = 12
@@ -137,7 +139,7 @@ private fun ToolExecutionCard(
 ) {
     val isError = record.exitCode != 0
     val preview = record.output.take(PREVIEW_MAX_LENGTH).replace("\n", " ")
-    val extended = OmniClawColors.current
+    
 
     Card(
         colors = CardDefaults.cardColors(
@@ -153,7 +155,7 @@ private fun ToolExecutionCard(
                 Icon(
                     Icons.Default.Code,
                     contentDescription = null,
-                    tint = if (isError) MaterialTheme.colorScheme.error else extended.success,
+                    tint = if (isError) MaterialTheme.colorScheme.error else OrbitSuccess,
                     modifier = Modifier.size(ICON_SIZE_TOOL_DP.dp)
                 )
                 Text(

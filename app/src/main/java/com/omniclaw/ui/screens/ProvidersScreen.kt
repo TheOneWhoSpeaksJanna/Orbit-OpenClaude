@@ -55,11 +55,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.ui.components.AnimatedGlassCard
 import com.omniclaw.ui.components.BrandIcons
 import com.omniclaw.ui.theme.MotionTokens
-import com.omniclaw.ui.theme.OmniClawColors
+
 import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.ConnectionState
 import com.omniclaw.ui.viewmodels.ProviderConfig
 import com.omniclaw.ui.viewmodels.ProvidersViewModel
+import com.omniclaw.ui.theme.OrbitSuccess
+import com.omniclaw.ui.theme.OrbitWarning
 
 private const val TITLE = "API Providers"
 private const val SUBTITLE = "Verify connectivity and manage endpoint configurations"
@@ -250,12 +252,12 @@ private fun ProviderHealthCard(
     onEditKey: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val extended = OmniClawColors.current
+    
 
     val accentColor = MaterialTheme.colorScheme.secondary
     val errorColor = MaterialTheme.colorScheme.error
     val statusColor by animateColorAsState(
-        targetValue = provider.connectionState.statusColor(extended, accentColor, errorColor),
+        targetValue = provider.connectionState.statusColor(accentColor, errorColor),
         animationSpec = MotionTokens.TweenNormalColor,
         label = "statusColor"
     )
@@ -315,7 +317,7 @@ private fun ProviderHealthCard(
                 Text(
                     text = if (provider.apiKeyConfigured) API_KEY_SET_LABEL else NO_API_KEY_LABEL,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (provider.apiKeyConfigured) extended.success else extended.warning
+                    color = if (provider.apiKeyConfigured) OrbitSuccess else OrbitWarning
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
@@ -383,15 +385,15 @@ private fun providerIcon(name: String): Painter = when (name) {
     else -> BrandIcons.OpenRouter
 }
 
+@Composable
 private fun ConnectionState.statusColor(
-    extended: com.omniclaw.ui.theme.OmniClawExtendedColors,
     accentColor: Color,
     errorColor: Color
 ): Color = when (this) {
-    is ConnectionState.Idle -> extended.textTertiary
+    is ConnectionState.Idle -> MaterialTheme.colorScheme.onSurfaceVariant
     is ConnectionState.Verifying -> accentColor
-    is ConnectionState.Connected -> extended.success
-    is ConnectionState.Unauthorized -> extended.warning
+    is ConnectionState.Connected -> OrbitSuccess
+    is ConnectionState.Unauthorized -> OrbitWarning
     is ConnectionState.Offline -> errorColor
     is ConnectionState.Error -> errorColor
 }

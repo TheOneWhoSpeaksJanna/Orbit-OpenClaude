@@ -35,9 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.ui.components.AnimatedGlassCard
-import com.omniclaw.ui.theme.OmniClawColors
+
 import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.SkillsViewModel
+import com.omniclaw.ui.theme.OrbitSuccess
+import com.omniclaw.ui.theme.OrbitWarning
 
 private const val SECTION_ACTIVE = "Active Capabilities"
 private const val SECTION_AGENTS = "Agents"
@@ -155,10 +157,10 @@ private fun CapabilityCard(
     status: String,
     modifier: Modifier = Modifier
 ) {
-    val extended = OmniClawColors.current
+    
     val statusColor = when (status.lowercase()) {
-        "active", "enabled", "ready", "available" -> extended.success
-        else -> extended.warning
+        "active", "enabled", "ready", "available" -> OrbitSuccess
+        else -> OrbitWarning
     }
 
     AnimatedGlassCard(
@@ -213,7 +215,7 @@ private fun CapabilityCard(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = extended.textTertiary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

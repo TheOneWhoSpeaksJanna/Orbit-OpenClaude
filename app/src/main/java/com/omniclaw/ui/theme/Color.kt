@@ -2,60 +2,51 @@ package com.omniclaw.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val OmniClawBgDark = Color(0xFF0A0E1A)
-val OmniClawSurfaceDark = Color(0xFF141A2E)
-val OmniClawSurfaceElevated = Color(0xFF1C2340)
+// ── Clean Material 3 Color Palette ──────────────────────────────
+// Replaces the old "cosmic glassmorphism" palette with a simple,
+// clean Material 3 palette. One accent color (indigo), standard
+// Material 3 surface hierarchy, no glow/glass effects.
 
-val OmniClawBgLight = Color(0xFFF8F9FC)
-val OmniClawSurfaceLight = Color(0xFFFFFFFF)
-val OmniClawSurfaceLightElevated = Color(0xFFF1F3F8)
+// Primary — Indigo
+val OrbitPrimary = Color(0xFF4F46E5)
+val OrbitOnPrimary = Color(0xFFFFFFFF)
+val OrbitPrimaryContainer = Color(0xFFE0E7FF)
+val OrbitOnPrimaryContainer = Color(0xFF1E1B4B)
 
-val OmniClawTextPrimary = Color(0xFFE8ECF4)
-val OmniClawTextSecondary = Color(0xFF9CA3B2)
-val OmniClawTextTertiary = Color(0xFF6B7280)
+// Secondary — Slate blue
+val OrbitSecondary = Color(0xFF64748B)
+val OrbitOnSecondary = Color(0xFFFFFFFF)
+val OrbitSecondaryContainer = Color(0xFFE2E8F0)
+val OrbitOnSecondaryContainer = Color(0xFF1E293B)
 
-val OmniClawTextPrimaryLight = Color(0xFF1F2937)
-val OmniClawTextSecondaryLight = Color(0xFF6B7280)
-val OmniClawTextTertiaryLight = Color(0xFF9CA3B2)
+// Tertiary — Violet
+val OrbitTertiary = Color(0xFF7C3AED)
+val OrbitOnTertiary = Color(0xFFFFFFFF)
+val OrbitTertiaryContainer = Color(0xFFEDE9FE)
+val OrbitOnTertiaryContainer = Color(0xFF2E1065)
 
-val OmniClawPrimary = Color(0xFF6C63FF)
-val OmniClawPrimaryDark = Color(0xFF5046E5)
-val OmniClawPrimaryLight = Color(0xFF8B85FF)
-val OmniClawPrimaryGlow = Color(0x406C63FF)
+// Error
+val OrbitError = Color(0xFFDC2626)
+val OrbitOnError = Color(0xFFFFFFFF)
+val OrbitErrorContainer = Color(0xFFFEE2E2)
+val OrbitOnErrorContainer = Color(0xFF7F1D1D)
 
-val OmniClawSecondary = Color(0xFF38BDF8)
-val OmniClawSecondaryDark = Color(0xFF0EA5E9)
-val OmniClawSecondaryLight = Color(0xFF7DD3FC)
-val OmniClawSecondaryGlow = Color(0x4038BDF8)
+// Dark theme surfaces
+val OrbitDarkBackground = Color(0xFF0F172A)
+val OrbitDarkSurface = Color(0xFF1E293B)
+val OrbitDarkSurfaceVariant = Color(0xFF334155)
+val OrbitDarkOnSurface = Color(0xFFF1F5F9)
+val OrbitDarkOnSurfaceVariant = Color(0xFF94A3B8)
+val OrbitDarkOutline = Color(0xFF475569)
 
-val OmniClawTertiary = Color(0xFFD946EF)
-val OmniClawTertiaryDark = Color(0xFFC026D3)
-val OmniClawTertiaryLight = Color(0xFFE879F9)
-val OmniClawTertiaryGlow = Color(0x40D946EF)
+// Light theme surfaces
+val OrbitLightBackground = Color(0xFFF8FAFC)
+val OrbitLightSurface = Color(0xFFFFFFFF)
+val OrbitLightSurfaceVariant = Color(0xFFF1F5F9)
+val OrbitLightOnSurface = Color(0xFF0F172A)
+val OrbitLightOnSurfaceVariant = Color(0xFF64748B)
+val OrbitLightOutline = Color(0xFFCBD5E1)
 
-val OmniClawGlassBorder = Color(0xFF2E3440)
-val OmniClawGlassBorderLight = Color(0xFFD1D5DB)
-val OmniClawGlassOverlay = Color(0x1AFFFFFF)
-val OmniClawGlassOverlayDeep = Color(0x0DFFFFFF)
-val OmniClawGlassOverlayPressed = Color(0x26FFFFFF)
-val OmniClawGlassShadow = Color(0x40000000)
-
-val OmniClawObsidianBase = Color(0xFF06080F)
-val OmniClawObsidianSurface = Color(0xFF0A0E1A)
-val OmniClawObsidianElevated = Color(0xFF0F1423)
-
-// Light-mode glass tokens. Dark mode's glass effect is a white-alpha overlay on a near-black
-// background; that same white overlay is invisible (and the dark border is wrong) on a white
-// background, which is why light mode looked broken. These use a primary-tinted overlay instead
-// so cards still read as "glass" against a light surface, with a light-appropriate border/shadow.
-val OmniClawGlassOverlayLight = Color(0x0F6C63FF)
-val OmniClawGlassOverlayDeepLight = Color(0x086C63FF)
-val OmniClawGlassOverlayPressedLight = Color(0x1F6C63FF)
-val OmniClawGlassShadowLight = Color(0x26000000)
-
-val OmniClawSuccess = Color(0xFF22C55E)
-val OmniClawWarning = Color(0xFFF59E0B)
-val OmniClawError = Color(0xFFEF4444)
-
-val OmniClawAccent = OmniClawSecondary
-val OmniClawAccentSecondary = OmniClawPrimary
+// Status colors (shared between themes)
+val OrbitSuccess = Color(0xFF16A34A)
+val OrbitWarning = Color(0xFFEA580C)

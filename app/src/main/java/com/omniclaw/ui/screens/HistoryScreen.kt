@@ -48,7 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.ui.components.AnimatedGlassCard
-import com.omniclaw.ui.theme.OmniClawColors
+
 import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.HistoryViewModel
 
@@ -111,7 +111,7 @@ fun HistoryScreen(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.secondary,
-                        unfocusedBorderColor = OmniClawColors.current.textTertiary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         cursorColor = MaterialTheme.colorScheme.secondary,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface
@@ -179,7 +179,7 @@ fun HistoryScreen(
                     Text(
                         text = NO_SESSIONS,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = OmniClawColors.current.textTertiary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -215,7 +215,7 @@ private fun HistorySessionCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.secondary
-    val extended = OmniClawColors.current
+    
     // Format the relative timestamp once per timestamp change — this allocates
     // a SimpleDateFormat + Date every call and is the kind of work that
     // quietly shows up in flame charts during list scroll.
@@ -262,13 +262,13 @@ private fun HistorySessionCard(
                         imageVector = Icons.Default.Schedule,
                         contentDescription = null,
                         modifier = Modifier.size(13.dp),
-                        tint = extended.textTertiary
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = relativeTime,
                         style = MaterialTheme.typography.bodySmall,
-                        color = extended.textTertiary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
