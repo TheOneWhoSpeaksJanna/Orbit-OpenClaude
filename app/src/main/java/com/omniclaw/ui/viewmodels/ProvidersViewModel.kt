@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.core.config.ApiConfig
+import com.omniclaw.core.logging.FileLogger
 import com.omniclaw.data.local.prefs.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,14 +49,11 @@ sealed class ConnectionState {
 }
 
 class ProvidersViewModel(
-    private val prefsManager: PreferencesManager
+    private val prefsManager: PreferencesManager,
+    private val context: android.content.Context
 ) : ViewModel() {
 
-    private val _providers = MutableStateFlow(
-        KNOWN_PROVIDERS.map { name ->
-            ProviderConfig(name = name, apiKeyConfigured = false)
-        }
-    )
+    private val _providers = MutableStateFlow<List<ProviderConfig>>(emptyList())
     val providers: StateFlow<List<ProviderConfig>> = _providers.asStateFlow()
 
     private val _editingProvider = MutableStateFlow<String?>(null)
@@ -72,7 +70,27 @@ class ProvidersViewModel(
     private val jsonMediaType = CONTENT_TYPE_JSON.toMediaType()
 
     init {
-        loadApiKeyStatus()
+        loadProviders()
+    }
+
+    /**
+     * Load providers dynamically from the bundled providers.catalog.json.
+     * This replaces the old hardcoded KNOWN_PROVIDERS list and shows all
+     * 30+ providers that OpenClaude supports.
+     */
+    private fun loadProviders() {
+        viewModelScope.launch {
+            val catalog = com.omniclaw.data.local.runtime.ProviderCatalog.load(context)
+            val configs = catalog.map { entry ->
+                val key = prefsManager.getApiKeyForProvider(entry.name).firstOrNull()
+                ProviderConfig(
+                    name = entry.name,
+                    apiKeyConfigured = !key.isNullOrBlank() || !entry.requiresKey
+                )
+            }
+            _providers.value = configs
+            FileLogger.i("ProvidersViewModel", "Loaded ${configs.size} providers from catalog")
+        }
     }
 
     private fun loadApiKeyStatus() {
@@ -255,11 +273,6 @@ class ProvidersViewModel(
     }
 
     companion object {
-        /** All provider names the UI knows about. MUST match AiProviderSelector keys. */
-        val KNOWN_PROVIDERS = listOf(
-            "Claude", "OpenAI", "Gemini", "OpenRouter",
-            "DeepSeek", "Groq", "Ollama"
-        )
         private const val CLAUDE_HEALTH_CHECK_BODY =
             """{"model":"${ApiConfig.CLAUDE_HEALTH_CHECK_MODEL}","max_tokens":1,"messages":[{"role":"user","content":"."}]}"""
 
@@ -267,7 +280,7 @@ class ProvidersViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 val application = checkNotNull(extras[APPLICATION_KEY]) as OmniClawApplication
-                return ProvidersViewModel(application.container.prefsManager) as T
+                return ProvidersViewModel(application.container.prefsManager, application) as T
             }
         }
     }
