@@ -209,6 +209,23 @@ enum class SetupStep(@StringRes val labelResId: Int) {
     Summary(R.string.step_summary);
 }
 
+/**
+ * High-level state of the post-"Finish Setup" finalization flow.
+ *
+ * IDLE       — user hasn't clicked Finish Setup yet.
+ * FINALIZING — agent install (Termux bootstrap + npm + wrapper) is running.
+ * READY      — install completed successfully (or user chose to skip).
+ * FAILED     — install threw an exception; user can retry or skip.
+ *
+ * The UI watches this to decide whether to show the loading overlay.
+ */
+enum class SetupPhase {
+    IDLE,
+    FINALIZING,
+    READY,
+    FAILED
+}
+
 class SetupViewModel(
     private val prefsManager: PreferencesManager,
     private val repository: OmniClawRepository,
@@ -283,6 +300,14 @@ class SetupViewModel(
         )
     )
     val agentInstallStates: StateFlow<Map<String, AgentInstallState>> = _agentInstallStates.asStateFlow()
+
+    /**
+     * Tracks the post-"Finish Setup" finalization phase. Drives the
+     * FinalizingOverlay UI so the user sees real progress before being
+     * dropped into the dashboard with an uninstalled agent.
+     */
+    private val _setupPhase = MutableStateFlow(SetupPhase.IDLE)
+    val setupPhase: StateFlow<SetupPhase> = _setupPhase.asStateFlow()
 
     val canAdvance: Boolean
         get() {
@@ -678,6 +703,9 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
 
     fun completeSetup() {
         viewModelScope.launch {
+            _setupPhase.value = SetupPhase.FINALIZING
+            FileLogger.i("SetupViewModel", "completeSetup start", "agent=${_selectedAgent.value}")
+
             prefsManager.setThemeMode(_theme.value)
             prefsManager.setShizukuEnabled(_shizukuEnabled.value)
             prefsManager.setSelectedAgent(_selectedAgent.value)
@@ -699,14 +727,21 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
             )
             repository.insertAgent(agent)
 
-            // Auto-install the pre-bundled agent for this flavor.
-            // This triggers PRoot rootfs extraction + apk add + npm install.
-            // The tar symlink fix (system tar instead of Java tar) should make
-            // PRoot work now. If it fails, the error is logged and the user
-            // can retry from the Setup screen.
-            if (FlavorConfig.presetAgentName.isNotBlank() && agentName == FlavorConfig.presetAgentName) {
-                installAgent(agentName)
-            }
+            // ALWAYS install the selected agent (idempotent — re-install is a
+            // no-op if already installed). We synchronously mark isInstalling=true
+            // BEFORE launching installAgent so that waitForInstallComplete()
+            // doesn't match the initial isInstalling=false state and return
+            // immediately. This makes the loading overlay show real progress.
+            _agentInstallStates.value = _agentInstallStates.value + (agentName to
+                (_agentInstallStates.value[agentName] ?: AgentInstallState()).copy(
+                    isInstalling = true,
+                    progress = 0f,
+                    status = STATUS_STARTING,
+                    isInstalled = false
+                ))
+            installAgent(agentName)
+            val installSuccess = waitForInstallComplete(agentName)
+            FileLogger.i("SetupViewModel", "completeSetup install finished", "success=$installSuccess")
 
             // Seed default Shizuku skill if not already present
             val existingSkills = repository.getAllSkills().firstOrNull().orEmpty()
@@ -718,7 +753,57 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
                     enabled = _shizukuEnabled.value
                 ))
             }
+
+            _setupPhase.value = if (installSuccess) SetupPhase.READY else SetupPhase.FAILED
         }
+    }
+
+    /**
+     * User chose to skip waiting. Mark as READY so the overlay's
+     * "Enter Orbit-AI" button appears. The background install continues
+     * running — if it fails later, the user can retry from the dashboard.
+     */
+    fun skipFinalization() {
+        FileLogger.w("SetupViewModel", "User skipped finalization")
+        _setupPhase.value = SetupPhase.READY
+    }
+
+    /**
+     * User clicked Retry on the failure state. Re-runs the install.
+     */
+    fun retryInstall() {
+        viewModelScope.launch {
+            _setupPhase.value = SetupPhase.FINALIZING
+            val agentName = _selectedAgent.value
+            FileLogger.i("SetupViewModel", "retryInstall start", "agent=$agentName")
+            _agentInstallStates.value = _agentInstallStates.value + (agentName to
+                (_agentInstallStates.value[agentName] ?: AgentInstallState()).copy(
+                    isInstalling = true,
+                    progress = 0f,
+                    status = "Retrying install...",
+                    isInstalled = false
+                ))
+            installAgent(agentName)
+            val installSuccess = waitForInstallComplete(agentName)
+            FileLogger.i("SetupViewModel", "retryInstall finished", "success=$installSuccess")
+            _setupPhase.value = if (installSuccess) SetupPhase.READY else SetupPhase.FAILED
+        }
+    }
+
+    /**
+     * Wait until the agent's isInstalling flag flips to false, then return
+     * the final isInstalled value. Used by completeSetup()/retryInstall()
+     * to block navigation to the dashboard until the install actually finishes.
+     */
+    private suspend fun waitForInstallComplete(agentName: String): Boolean {
+        // StateFlow.firstOrNull emits the current value first, then waits for
+        // subsequent emissions. The predicate matches only when isInstalling
+        // becomes false (i.e. install has finished, success or failure).
+        val finalStates = _agentInstallStates.firstOrNull { states ->
+            val state = states[agentName] ?: return@firstOrNull false
+            !state.isInstalling
+        } ?: return false
+        return finalStates[agentName]?.isInstalled ?: false
     }
 
     fun finishOnboarding() {

@@ -107,4 +107,18 @@
     <string name="speed_format">%1$.1f MB/s</string>
     <string name="time_remaining">%1$d s remaining</string>
     <string name="termux_explanation">OmniClaw uses a companion service to execute local shell commands natively on your device.</string>
+
+    <!-- Finalizing Overlay (loading screen after Finish Setup) -->
+    <string name="finalizing_title">Setting up your agent</string>
+    <string name="finalizing_subtitle">Installing %1$s on your device. This may take 2–5 minutes on first run.</string>
+    <string name="finalizing_elapsed">⏱ %1$s elapsed</string>
+    <string name="finalizing_starting">Starting installation…</string>
+    <string name="finalizing_skip">Skip and enter app</string>
+    <string name="finalizing_success_title">Setup complete!</string>
+    <string name="finalizing_success_subtitle">%1$s is ready to use. You can now start chatting.</string>
+    <string name="finalizing_enter_app">Enter Orbit-AI</string>
+    <string name="finalizing_failed_title">Installation failed</string>
+    <string name="finalizing_failed_unknown">The agent could not be installed. Check the logs for details.</string>
+    <string name="finalizing_skip_anyway">Skip anyway</string>
+    <string name="finalizing_retry">Retry</string>
 </resources>

@@ -2,7 +2,12 @@ package com.omniclaw.ui.screens
 
 import android.content.pm.PackageManager
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -15,6 +20,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omniclaw.R
 import com.omniclaw.ui.components.AnimatedGlassCard
+import com.omniclaw.ui.viewmodels.SetupPhase
 import com.omniclaw.ui.viewmodels.SetupStep
 import com.omniclaw.ui.viewmodels.SetupViewModel
 import kotlinx.coroutines.delay
@@ -71,97 +80,121 @@ fun SetupWizardScreen(
     val currentStepDef = filteredSteps.getOrNull(currentStep) ?: SetupStep.Welcome
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = stringResource(R.string.step_n_of_m, currentStep + 1, filteredSteps.size),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = stringResource(id = currentStepDef.labelResId),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        bottomBar = {
-            BottomAppBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
-            ) {
-                if (currentStep > 0) {
-                    TextButton(onClick = { viewModel.previousStep() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.back))
-                    }
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                if (currentStep < filteredSteps.lastIndex) {
-                    Button(
-                        onClick = { viewModel.nextStep() },
-                        enabled = viewModel.canAdvance
-                    ) {
-                        Text(stringResource(R.string.next))
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.next))
-                    }
-                } else {
-                    Button(onClick = {
-                        viewModel.completeSetup()
-                        scope.launch {
-                            delay(400)
-                            viewModel.finishOnboarding()
-                            onFinishSetup()
+    // Finalization overlay state — when non-IDLE, shows full-screen loading
+    // that blocks navigation until the agent install actually completes.
+    val setupPhase by viewModel.setupPhase.collectAsState()
+    val selectedAgent by viewModel.selectedAgent.collectAsState()
+    val agentInstallStates by viewModel.agentInstallStates.collectAsState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(R.string.step_n_of_m, currentStep + 1, filteredSteps.size),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(id = currentStepDef.labelResId),
+                                style = MaterialTheme.typography.titleSmall
+                            )
                         }
-                    }) {
-                        Text(stringResource(R.string.finish_setup))
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            },
+            bottomBar = {
+                BottomAppBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp
+                ) {
+                    if (currentStep > 0) {
+                        TextButton(onClick = { viewModel.previousStep() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.back))
+                        }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (currentStep < filteredSteps.lastIndex) {
+                        Button(
+                            onClick = { viewModel.nextStep() },
+                            enabled = viewModel.canAdvance
+                        ) {
+                            Text(stringResource(R.string.next))
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.next))
+                        }
+                    } else {
+                        Button(onClick = {
+                            // Trigger setup + agent install. The FinalizingOverlay
+                            // will appear and block navigation until install completes.
+                            viewModel.completeSetup()
+                        }) {
+                            Text(stringResource(R.string.finish_setup))
+                        }
                     }
                 }
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    AnimatedContent(
+                        targetState = currentStep,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(200)).togetherWith(
+                                fadeOut(animationSpec = tween(150))
+                            )
+                        },
+                        label = "SetupWizardTransition"
+                    ) { step ->
+                        val stepDef = if (hasFlavorPreset) SetupStep.entries.filter { it != SetupStep.Agent }.getOrNull(step) else SetupStep.entries.getOrNull(step)
+                        when (stepDef) {
+                            SetupStep.Welcome -> WelcomeStep()
+                            SetupStep.Theme -> ThemeSelectionStep(viewModel)
+                            SetupStep.Agent -> AgentSelectionStep(viewModel)
+                            SetupStep.Provider -> ProviderSelectionStep(viewModel)
+                            SetupStep.Shizuku -> ShizukuStep(viewModel)
+                            SetupStep.Storage -> StoragePermissionStep(viewModel)
+                            SetupStep.Summary -> SummaryStep()
+                            null -> Unit
+                        }
+                    }
+                }
+                GlassPageIndicator(
+                    totalSteps = filteredSteps.size,
+                    currentStep = currentStep
+                )
             }
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                AnimatedContent(
-                    targetState = currentStep,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(200)).togetherWith(
-                            fadeOut(animationSpec = tween(150))
-                        )
-                    },
-                    label = "SetupWizardTransition"
-                ) { step ->
-                    val stepDef = if (hasFlavorPreset) SetupStep.entries.filter { it != SetupStep.Agent }.getOrNull(step) else SetupStep.entries.getOrNull(step)
-                    when (stepDef) {
-                        SetupStep.Welcome -> WelcomeStep()
-                        SetupStep.Theme -> ThemeSelectionStep(viewModel)
-                        SetupStep.Agent -> AgentSelectionStep(viewModel)
-                        SetupStep.Provider -> ProviderSelectionStep(viewModel)
-                        SetupStep.Shizuku -> ShizukuStep(viewModel)
-                        SetupStep.Storage -> StoragePermissionStep(viewModel)
-                        SetupStep.Summary -> SummaryStep()
-                        null -> Unit
-                    }
+
+        // Full-screen loading overlay — appears above the wizard content when
+        // setupPhase != IDLE. Blocks the back button and all underlying UI
+        // taps so the user can't accidentally navigate to the dashboard with
+        // an uninstalled agent.
+        if (setupPhase != SetupPhase.IDLE) {
+            val agentState = agentInstallStates[selectedAgent] ?: SetupViewModel.AgentInstallState()
+            FinalizingOverlay(
+                phase = setupPhase,
+                agentName = selectedAgent,
+                agentState = agentState,
+                onSkip = { viewModel.skipFinalization() },
+                onRetry = { viewModel.retryInstall() },
+                onEnterApp = {
+                    viewModel.finishOnboarding()
+                    onFinishSetup()
                 }
-            }
-            GlassPageIndicator(
-                totalSteps = filteredSteps.size,
-                currentStep = currentStep
             )
         }
     }
@@ -833,6 +866,272 @@ private fun GlassPageIndicator(totalSteps: Int, currentStep: Int) {
                     .clip(CircleShape)
                     .background(dotColor)
             )
+        }
+    }
+}
+
+/**
+ * Full-screen loading overlay shown after the user clicks "Finish Setup".
+ *
+ * WHY THIS EXISTS:
+ * The agent install (Termux bootstrap extraction + npm install + wrapper
+ * creation) takes 2–5 minutes on first run. Previously the wizard navigated
+ * to the dashboard immediately after kicking off the install, so users would
+ * land on the chat screen and get an "Agent not installed" error. This overlay
+ * blocks navigation until the install actually completes — or the user
+ * explicitly chooses to skip.
+ *
+ * Three visual states driven by [phase]:
+ *  - FINALIZING: spinner + progress bar + live status text + elapsed timer + Skip link
+ *  - READY:      green check + "Enter Orbit-AI" button
+ *  - FAILED:     red error icon + Retry button + "Skip anyway" button
+ *
+ * The overlay also intercepts the system back button so the user can't back
+ * out of the install.
+ */
+@Composable
+private fun FinalizingOverlay(
+    phase: SetupPhase,
+    agentName: String,
+    agentState: SetupViewModel.AgentInstallState,
+    onSkip: () -> Unit,
+    onRetry: () -> Unit,
+    onEnterApp: () -> Unit
+) {
+    // Intercept system back so the user can't accidentally exit mid-install.
+    androidx.activity.compose.BackHandler(enabled = true) {
+        // During FINALIZING, back is a no-op (don't dismiss the overlay).
+        // During READY/FAILED, back also does nothing — user must tap a button.
+    }
+
+    // Elapsed-time counter — reassures the user that the install is actually
+    // progressing, not stuck. Ticks every second.
+    var elapsedSeconds by remember { mutableIntStateOf(0) }
+    LaunchedEffect(phase) {
+        if (phase == SetupPhase.FINALIZING) {
+            elapsedSeconds = 0
+            while (true) {
+                delay(1000)
+                elapsedSeconds++
+            }
+        }
+    }
+
+    val minutes = elapsedSeconds / 60
+    val seconds = elapsedSeconds % 60
+    val elapsedText = "%d:%02d".format(minutes, seconds)
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = agentState.progress,
+        animationSpec = tween(durationMillis = 300),
+        label = "FinalizeProgress"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.96f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (phase) {
+                    SetupPhase.FINALIZING -> {
+                        // Pulsing hourglass icon
+                        val infiniteTransition = rememberInfiniteTransition(label = "FinalizePulse")
+                        val pulseScale by infiniteTransition.animateFloat(
+                            initialValue = 0.92f,
+                            targetValue = 1.08f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(900, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "PulseScale"
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.HourglassEmpty,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .graphicsLayer {
+                                    scaleX = pulseScale
+                                    scaleY = pulseScale
+                                },
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = stringResource(R.string.finalizing_title),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.finalizing_subtitle, agentName),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Progress bar
+                        LinearProgressIndicator(
+                            progress = { animatedProgress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${(animatedProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = stringResource(R.string.finalizing_elapsed, elapsedText),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Live status message from the installer
+                        val statusText = agentState.status.ifBlank { stringResource(R.string.finalizing_starting) }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Skip link — proceeds to dashboard even if install isn't done
+                        TextButton(onClick = onSkip) {
+                            Text(
+                                text = stringResource(R.string.finalizing_skip),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+
+                    SetupPhase.READY -> {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = stringResource(R.string.finalizing_success_title),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.finalizing_success_subtitle, agentName),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(28.dp))
+                        Button(
+                            onClick = onEnterApp,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(R.string.finalizing_enter_app),
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    SetupPhase.FAILED -> {
+                        Icon(
+                            imageVector = Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = stringResource(R.string.finalizing_failed_title),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val errorDetail = agentState.status.ifBlank { stringResource(R.string.finalizing_failed_unknown) }
+                        Text(
+                            text = errorDetail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onSkip,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(R.string.finalizing_skip_anyway))
+                            }
+                            Button(
+                                onClick = onRetry,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text(stringResource(R.string.finalizing_retry))
+                            }
+                        }
+                    }
+
+                    SetupPhase.IDLE -> Unit // overlay not shown
+                }
+            }
         }
     }
 }
