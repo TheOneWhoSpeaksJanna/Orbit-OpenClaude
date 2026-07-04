@@ -2,7 +2,6 @@ package com.omniclaw.core.di
 
 import android.content.Context
 import androidx.room.Room
-import com.omniclaw.data.api.AgentDownloaderImpl
 import com.omniclaw.data.api.tools.ExecuteCommandTool
 import com.omniclaw.data.api.tools.SudoCommandTool
 import com.omniclaw.data.api.tools.ToolRegistry
@@ -11,12 +10,10 @@ import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.repository.OmniClawRepositoryImpl
 import com.omniclaw.data.repository.OpenCodeRepositoryImpl
-import com.omniclaw.domain.api.AgentDownloader
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.repository.OmniClawRepository
 import com.omniclaw.domain.repository.OpenCodeRepository
 import okhttp3.OkHttpClient
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 interface AppContainer {
@@ -26,11 +23,9 @@ interface AppContainer {
     val toolRegistry: ToolRegistry
     val localCommandRunner: LocalCommandRunner
     val runtimeManager: com.omniclaw.data.local.runtime.OmniClawRuntimeManager
-    val packageInstaller: com.omniclaw.data.local.runtime.PackageInstaller
     val termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime
     val toolCallRecorder: ToolCallRecorder
     val openCodeRepository: OpenCodeRepository
-    val agentDownloader: AgentDownloader
     val okHttpClient: OkHttpClient
 }
 
@@ -66,13 +61,6 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.omniclaw.data.local.runtime.OmniClawRuntimeManager(context)
     }
 
-    override val packageInstaller: com.omniclaw.data.local.runtime.PackageInstaller by lazy {
-        com.omniclaw.data.local.runtime.PackageInstaller(
-            runtimeManager,
-            okHttpClient
-        )
-    }
-
     override val localCommandRunner: LocalCommandRunner by lazy {
         LocalCommandRunner(runtimeManager)
     }
@@ -94,21 +82,12 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         )
     }
 
-    private val downloadDir: File by lazy {
-        File(context.filesDir, DOWNLOAD_DIR_NAME).also { it.mkdirs() }
-    }
-
     override val openCodeRepository: OpenCodeRepository by lazy {
         OpenCodeRepositoryImpl()
     }
 
-    override val agentDownloader: AgentDownloader by lazy {
-        AgentDownloaderImpl(downloadDir)
-    }
-
     companion object {
         private const val DATABASE_NAME = "omniclaw_database"
-        private const val DOWNLOAD_DIR_NAME = "opencode_agents"
         private const val CONNECT_TIMEOUT_SECONDS = 30L
         private const val READ_TIMEOUT_SECONDS = 60L
         private const val WRITE_TIMEOUT_SECONDS = 60L

@@ -8,7 +8,6 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.prefs.PreferencesManager
-import com.omniclaw.data.local.runtime.PackageInstaller
 import com.omniclaw.data.local.runtime.TermuxRuntime
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.UUID
 
 private const val DEFAULT_PROVIDER = "Gemini"
@@ -48,7 +46,6 @@ class ChatViewModel(
     private val localCommandRunner: LocalCommandRunner,
     private val prefsManager: PreferencesManager,
     private val openCodeRepository: OpenCodeRepository,
-    private val packageInstaller: PackageInstaller,
     private val termuxRuntime: TermuxRuntime
 ) : ViewModel() {
 
@@ -449,10 +446,6 @@ class ChatViewModel(
         private val SUDO_COMMAND_REGEX = "\\[SUDO: (.+?)]".toRegex()
         val DEFAULT_MODELS = listOf("gemini-2.0-flash-exp", "gpt-4o", "claude-sonnet-4-20250514", "glm-5.2", "glm-4.6")
 
-        /** Resolve the system shell path. Honors ANDROID_ROOT for custom ROMs. */
-        private val SYSTEM_SH: String =
-            android.system.Os.getenv("ANDROID_ROOT")?.let { "$it/bin/sh" } ?: "/system/bin/sh"
-
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
@@ -463,7 +456,6 @@ class ChatViewModel(
                     application.container.localCommandRunner,
                     application.container.prefsManager,
                     application.container.openCodeRepository,
-                    application.container.packageInstaller,
                     application.container.termuxRuntime
                 ) as T
             }

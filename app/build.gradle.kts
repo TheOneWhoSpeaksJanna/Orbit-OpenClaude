@@ -139,7 +139,10 @@ android {
   }
 
   // Extract native libraries (.so files) from the APK to the filesystem.
-  // This is REQUIRED for libbusybox.so and libproot.so to be exec'able.
+  // REQUIRED so libproot.so and libproot_loader.so are extracted to
+  // /data/app/<pkg>/lib/arm64/ (apk_data_file label, exec allowed).
+  // Without this, .so files stay page-aligned inside the APK and can't
+  // be execve()'d — PRoot itself couldn't run.
   packaging {
     jniLibs {
       useLegacyPackaging = true
@@ -213,7 +216,6 @@ secrets {
 
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
@@ -233,7 +235,6 @@ dependencies {
   implementation(libs.converter.moshi)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
-  implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation("dev.rikka.shizuku:api:13.1.5")
@@ -256,7 +257,6 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
 }
 
 tasks.withType<Test> {

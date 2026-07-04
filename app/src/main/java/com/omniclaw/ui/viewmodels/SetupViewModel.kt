@@ -9,29 +9,22 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.BuildConfig
 import com.omniclaw.OmniClawApplication
 import com.omniclaw.R
-import com.omniclaw.core.config.ApiConfig
 import com.omniclaw.core.config.FlavorConfig
 import com.omniclaw.core.logging.FileLogger
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.runtime.OmniClawRuntimeManager
-import com.omniclaw.data.local.runtime.PackageInstaller
 import com.omniclaw.domain.models.Agent
 import com.omniclaw.domain.models.Skill
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
 import com.omniclaw.domain.repository.OmniClawRepository
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
-import java.net.URL
-import java.util.zip.ZipInputStream
 
 private const val DEFAULT_THEME = "System"
 private const val DEFAULT_AGENT = "OpenClaude"
@@ -50,8 +43,6 @@ private const val STATUS_BUILDING = "Building "
 private const val STATUS_CREATING_SCRIPT = "Creating run script..."
 private const val STATUS_INSTALLED = " installed successfully!"
 private const val STATUS_FAILED = "Installation failed: "
-
-private val DIST_CANDIDATES = listOf("dist/cli.js", "dist/index.js", "cli.js", "index.js", "bin/cli.js")
 
 private const val SHIZUKU_SKILL_ID = "shizuku_phone_control"
 
@@ -147,11 +138,6 @@ private val AGENT_INSTALL_DIRS = mapOf(
     AGENT_CODEX to "codex"
 )
 
-private val AGENT_WRAPPER_NAMES = mapOf(
-    AGENT_CLAUDE_CODE to "claude-code",
-    AGENT_OPENCODE to "lildax"
-)
-
 /**
  * NPM package names for each agent. Used to install the agent via npm
  * inside the PRoot Alpine environment.
@@ -230,9 +216,7 @@ class SetupViewModel(
     private val prefsManager: PreferencesManager,
     private val repository: OmniClawRepository,
     private val aiProvider: AiProvider,
-    private val localCommandRunner: LocalCommandRunner,
     private val runtimeManager: OmniClawRuntimeManager,
-    private val packageInstaller: PackageInstaller,
     private val appContainer: com.omniclaw.core.di.AppContainer
 ) : ViewModel() {
 
@@ -386,10 +370,6 @@ class SetupViewModel(
 
     fun installAgent(agentName: String) {
         val targetDirName = AGENT_INSTALL_DIRS[agentName] ?: agentName.lowercase().replace(" ", "-")
-        val targetDir = File(runtimeManager.agentsDir, targetDirName)
-        val binDir = runtimeManager.binDir
-        val wrapperName = AGENT_WRAPPER_NAMES[agentName] ?: agentName.lowercase()
-        val wrapperFile = File(binDir, wrapperName)
 
         viewModelScope.launch {
             _agentInstallStates.value = _agentInstallStates.value + (agentName to AgentInstallState(
@@ -439,85 +419,9 @@ class SetupViewModel(
                     if (installResult.exitCode != 0) {
                         FileLogger.w("SetupViewModel", "npm install warning", "output=${installResult.output.take(200)}")
                     }
-                }
-
-                // Also try extracting from bundled assets (for offline use)
-                val installedFromAssets = withContext(Dispatchers.IO) {
-                    tryInstallFromAssets(agentName, targetDir, binDir, wrapperName, wrapperFile)
-                }
-
-                if (!installedFromAssets && npmPackage == null) {
-                    updateInstallState(agentName, progress = 0.1f, status = "$STATUS_DOWNLOADING$agentName...")
-
-                    if (targetDir.exists()) {
-                        targetDir.deleteRecursively()
-                    }
-
-                    // The fallback GitHub repo URL is flavor-specific (per BuildConfig).
-                    val fallbackRepoUrl = ApiConfig.AGENT_FALLBACK_REPO_URL
-                    if (fallbackRepoUrl.isBlank()) {
-                        throw IllegalStateException(
-                            "No bundled agent archive found and no fallback repo configured for this flavor."
-                        )
-                    }
-
-                    withContext(Dispatchers.IO) {
-                        val zipUrl = fallbackRepoUrl
-                            .removeSuffix(".git") + "/archive/refs/heads/main.zip"
-
-                        val connection = URL(zipUrl).openConnection()
-                        connection.connectTimeout = ApiConfig.AGENT_DOWNLOAD_CONNECT_TIMEOUT_MS
-                        connection.readTimeout = ApiConfig.AGENT_DOWNLOAD_READ_TIMEOUT_MS
-
-                        val tempDir = File(runtimeManager.tmpDir, "agent_$targetDirName")
-                        tempDir.deleteRecursively()
-                        tempDir.mkdirs()
-
-                        ZipInputStream(connection.getInputStream()).use { zis ->
-                            var entry = zis.nextEntry
-                            while (entry != null) {
-                                val entryFile = File(tempDir, entry.name)
-                                if (entry.isDirectory) {
-                                    entryFile.mkdirs()
-                                } else {
-                                    entryFile.parentFile?.mkdirs()
-                                    entryFile.outputStream().use { output ->
-                                        zis.copyTo(output)
-                                    }
-                                }
-                                zis.closeEntry()
-                                entry = zis.nextEntry
-                            }
-                        }
-
-                        val rootDir = tempDir.listFiles()?.firstOrNull { it.isDirectory }
-                        if (rootDir != null) {
-                            rootDir.copyRecursively(targetDir, overwrite = true)
-                        } else {
-                            tempDir.copyRecursively(targetDir, overwrite = true)
-                        }
-                        tempDir.deleteRecursively()
-                    }
-
-                    updateInstallState(agentName, progress = 0.4f, status = STATUS_INSTALLING_DEPS)
-
-                    withContext(Dispatchers.IO) {
-                        try {
-                            localCommandRunner.executeCommand(
-                                "cd ${targetDir.absolutePath} && npm install --production 2>/dev/null || true"
-                            )
-                        } catch (_: Exception) { }
-                    }
-
-                    updateInstallState(agentName, progress = 0.7f, status = "$STATUS_BUILDING$agentName...")
-
-                    withContext(Dispatchers.IO) {
-                        try {
-                            localCommandRunner.executeCommand(
-                                "cd ${targetDir.absolutePath} && npm run build 2>/dev/null || true"
-                            )
-                        } catch (_: Exception) { }
-                    }
+                } else {
+                    // Hermes or unknown agent — no npm package, skip install.
+                    FileLogger.i("SetupViewModel", "No npm package for agent, skipping npm install", "agent=$agentName")
                 }
 
                 // ── Store runCommand as a rootfs-relative command string ──
@@ -565,105 +469,6 @@ class SetupViewModel(
         }
     }
 
-    /**
-     * Try to install agent from pre-bundled APK assets (agent.tar.gz).
-     * Returns true if extracted from assets, false if no bundled archive found.
-     */
-    private suspend fun tryInstallFromAssets(
-        agentName: String,
-        targetDir: File,
-        binDir: File,
-        wrapperName: String,
-        wrapperFile: File
-    ): Boolean {
-        return try {
-            val inputStream = runtimeManager.context.assets.open("agent.tar.gz")
-            val archiveFile = File(runtimeManager.tmpDir, "agent_${wrapperName}_bundled.tar.gz")
-            archiveFile.parentFile?.mkdirs()
-            archiveFile.outputStream().use { output ->
-                inputStream.copyTo(output)
-            }
-            inputStream.close()
-
-            if (!archiveFile.exists() || archiveFile.length() == 0L) {
-                archiveFile.delete()
-                return false
-            }
-
-            if (targetDir.exists()) {
-                targetDir.deleteRecursively()
-            }
-            targetDir.mkdirs()
-
-            localCommandRunner.executeCommand(
-                "tar -xzf ${archiveFile.absolutePath} -C ${targetDir.absolutePath}"
-            )
-
-            archiveFile.delete()
-
-            val entryPoint = DIST_CANDIDATES.firstOrNull { File(targetDir, it).exists() }
-            if (entryPoint == null) {
-                FileLogger.w("SetupViewModel", "Asset install: no entry point", "dir=${targetDir.absolutePath}")
-                targetDir.deleteRecursively()
-                return false
-            }
-
-            // Create a RESILIENT wrapper that searches for node at runtime.
-            // Same pattern as the download path — see comments there.
-            val runtimeDirPath = runtimeManager.runtimeDir.absolutePath
-            val packagesDirPath = runtimeManager.packagesDir.absolutePath
-            val binDirPath = runtimeManager.binDir.absolutePath
-            val wrapperScript = """
-#!${SYSTEM_SH}
-# Orbit-AI agent wrapper for $agentName (from bundled assets)
-# Auto-generated — searches for node at runtime.
-RUNTIME_DIR="$runtimeDirPath"
-AGENT_ENTRY="${targetDir.absolutePath}/${entryPoint}"
-
-NODE=""
-for candidate in \
-    "$packagesDirPath/nodejs/usr/bin/node" \
-    "$packagesDirPath/node/bin/node" \
-    "$packagesDirPath/nodejs/bin/node" \
-    "$${'$'}(command -v node 2>/dev/null)" \
-    "/system/bin/node"; do
-    if [ -x "$${'$'}candidate" ]; then
-        NODE="$${'$'}candidate"
-        break
-    fi
-done
-
-if [ -z "$${'$'}NODE" ]; then
-    echo "ERROR: Node.js binary not found." >&2
-    echo "Install it by running: omniclaw-pkg install nodejs" >&2
-    exit 1
-fi
-
-NODE_LIB_DIR="$packagesDirPath/nodejs/usr/lib"
-if [ -d "$${'$'}NODE_LIB_DIR" ]; then
-    export LD_LIBRARY_PATH="$${'$'}NODE_LIB_DIR:$${'$'}LD_LIBRARY_PATH"
-fi
-
-export PATH="$binDirPath:$${'$'}PATH"
-export HOME="$runtimeDirPath"
-export TMPDIR="$runtimeDirPath/tmp"
-
-exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
-            """.trimIndent()
-
-            FileLogger.i("SetupViewModel", "Agent wrapper created (from assets)")
-
-            wrapperFile.parentFile?.mkdirs()
-            wrapperFile.writeText(wrapperScript)
-            makeExecutable(wrapperFile)
-
-            true
-        } catch (_: Exception) {
-            // Assets not found or extraction failed; fall back to download
-            false
-        }
-    }
-
     private fun updateInstallState(agentName: String, progress: Float? = null, status: String? = null, isInstalled: Boolean? = null) {
         val current = _agentInstallStates.value[agentName] ?: AgentInstallState()
         _agentInstallStates.value = _agentInstallStates.value + (agentName to current.copy(
@@ -671,21 +476,6 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
             status = status ?: current.status,
             isInstalled = isInstalled ?: current.isInstalled
         ))
-    }
-
-    /**
-     * Mark a file as executable. [File.setExecutable] can silently fail on
-     * some Android versions due to SELinux policies, so we fall back to
-     * shell-level chmod +x if the Java API doesn't stick.
-     */
-    private suspend fun makeExecutable(file: File) {
-        file.setExecutable(true)
-        if (!file.canExecute()) {
-            try {
-                // LocalCommandRunner handles shell PATH resolution and SELinux
-                localCommandRunner.executeCommand("chmod +x " + file.absolutePath)
-            } catch (_: Exception) { /* best effort */ }
-        }
     }
 
     fun completeSetup() {
@@ -805,13 +595,6 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
     }
 
     companion object {
-        /**
-         * Resolve the system shell path. Uses ANDROID_ROOT so the app works on
-         * devices/ROMs that mount /system elsewhere (e.g. some emulators).
-         */
-        private val SYSTEM_SH: String =
-            android.system.Os.getenv("ANDROID_ROOT")?.let { "$it/bin/sh" } ?: "/system/bin/sh"
-
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
@@ -820,9 +603,7 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
                     application.container.prefsManager,
                     application.container.repository,
                     application.container.aiProvider,
-                    application.container.localCommandRunner,
                     application.container.runtimeManager,
-                    application.container.packageInstaller,
                     application.container
                 ) as T
             }

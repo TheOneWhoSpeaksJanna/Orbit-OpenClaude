@@ -166,14 +166,33 @@ class TermuxRuntime(private val context: Context) {
             val binBash = File(prefixDir, "bin/bash")
             FileLogger.i(TAG, "Binary check", "sh=${binSh.exists()} bash=${binBash.exists()} sh_canonical=${binSh.canonicalPath}")
 
-            // Step 4: Set up apt sources.list and writable dirs
+            // Step 4: Set up apt sources.list, DNS, and writable dirs
             onProgress(0.5f, "Configuring environment...")
             File(prefixDir, "etc/apt/sources.list.d").mkdirs()
+            File(prefixDir, "etc/apt/apt.conf.d").mkdirs()
+            File(prefixDir, "etc/apt/preferences.d").mkdirs()
             File(prefixDir, "var/log").mkdirs()
             File(prefixDir, "tmp").mkdirs()
             // Create /home inside the rootfs — used as HOME for commands
             // running under PRoot without the -0 (fake root) flag.
             File(prefixDir, "home").mkdirs()
+            // dpkg state directories — apt needs these to track installs.
+            // The bootstrap may include them, but create if missing.
+            File(prefixDir, "var/lib/dpkg/info").mkdirs()
+            File(prefixDir, "var/lib/dpkg/updates").mkdirs()
+            File(prefixDir, "var/lib/dpkg/parts").mkdirs()
+            File(prefixDir, "var/cache/apt/archives/partial").mkdirs()
+            File(prefixDir, "var/cache/apt/archives/partial").mkdirs()
+            val dpkgStatus = File(prefixDir, "var/lib/dpkg/status")
+            if (!dpkgStatus.exists()) dpkgStatus.writeText("")
+            val dpkgAvailable = File(prefixDir, "var/lib/dpkg/available")
+            if (!dpkgAvailable.exists()) dpkgAvailable.writeText("")
+            // DNS resolution — PRoot bind-mounts /system but apt needs
+            // /etc/resolv.conf inside the rootfs to resolve package URLs.
+            val resolvConf = File(prefixDir, "etc/resolv.conf")
+            if (!resolvConf.exists()) {
+                resolvConf.writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+            }
             val sourcesList = File(prefixDir, "etc/apt/sources.list")
             sourcesList.parentFile?.mkdirs()
             sourcesList.writeText("deb https://packages.termux.dev/apt/termux-main/ stable main\n")
@@ -263,6 +282,12 @@ class TermuxRuntime(private val context: Context) {
                 "-b", "/odm",
                 "-b", "/linkerconfig",
                 "-b", "/data/local/tmp:/tmp",
+                // CRITICAL: Termux binaries have /data/data/com.termux/files/usr
+                // hardcoded as their PREFIX. apt looks for config at
+                // /data/data/com.termux/files/usr/etc/apt/apt.conf.d/
+                // and symlinks point to /data/data/com.termux/files/usr/bin/*.
+                // Bind-mount our prefixDir over that path so everything resolves.
+                "-b", "${prefixDir.absolutePath}:/data/data/com.termux/files/usr",
                 // Make our runtime dir visible inside the rootfs at /orbit
                 "-b", "$runtimeDir:/orbit",
                 // Set working directory to / (inside rootfs)
