@@ -80,10 +80,10 @@ class TermuxViewModel(
     fun installTool(toolName: String) {
         FileLogger.i(TAG, "installTool start", "tool=$toolName")
         viewModelScope.launch(Dispatchers.IO) {
-            val prootRuntime = appContainer.prootRuntime
+            val termuxRuntime = appContainer.termuxRuntime
 
             // Ensure rootfs is installed
-            if (!prootRuntime.isRootfsInstalled) {
+            if (!termuxRuntime.isInstalled) {
                 repository.insertTermuxLog(
                     TermuxLog(
                         id = java.util.UUID.randomUUID().toString(),
@@ -93,7 +93,7 @@ class TermuxViewModel(
                         timestamp = System.currentTimeMillis()
                     )
                 )
-                prootRuntime.installRootfs { progress, status ->
+                termuxRuntime.install { progress, status ->
                     FileLogger.d(TAG, "Rootfs install", "progress=$progress")
                 }
             }
@@ -111,7 +111,7 @@ class TermuxViewModel(
 
             // Install via apk inside PRoot Alpine environment
             FileLogger.i(TAG, "apk install start", "tool=$toolName")
-            val result = prootRuntime.executeInRootfs("apk add --no-cache $toolName", "")
+            val result = termuxRuntime.executeInTermux("apk add --no-cache $toolName", "")
             val success = result.exitCode == 0
             val finalStatus = if (success) "$SUCCESS_PREFIX$toolName." else "$FAILURE_PREFIX$toolName: ${result.output.take(200)}"
             FileLogger.i(TAG, "apk install result", "success=$success exit=${result.exitCode}")
@@ -226,10 +226,10 @@ class TermuxViewModel(
             // The terminal now runs commands inside the Alpine Linux rootfs
             // via PRoot, giving the user a REAL Linux shell with node, git,
             // python, etc. — not the limited Android shell.
-            val prootRuntime = appContainer.prootRuntime
+            val termuxRuntime = appContainer.termuxRuntime
 
             // Ensure rootfs is installed
-            if (!prootRuntime.isRootfsInstalled) {
+            if (!termuxRuntime.isInstalled) {
                 repository.insertTermuxLog(
                     TermuxLog(
                         id = java.util.UUID.randomUUID().toString(),
@@ -239,12 +239,12 @@ class TermuxViewModel(
                         timestamp = System.currentTimeMillis()
                     )
                 )
-                prootRuntime.installRootfs { progress, status ->
+                termuxRuntime.install { progress, status ->
                     FileLogger.d(TAG, "Rootfs install: $progress — $status")
                 }
             }
 
-            val executionResult = prootRuntime.executeInRootfs(trimmed, "")
+            val executionResult = termuxRuntime.executeInTermux(trimmed, "")
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),
                 command = trimmed,

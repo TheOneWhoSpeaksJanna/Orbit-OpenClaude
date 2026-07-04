@@ -27,7 +27,7 @@ interface AppContainer {
     val localCommandRunner: LocalCommandRunner
     val runtimeManager: com.omniclaw.data.local.runtime.OmniClawRuntimeManager
     val packageInstaller: com.omniclaw.data.local.runtime.PackageInstaller
-    val prootRuntime: com.omniclaw.data.local.runtime.PRootRuntime
+    val termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime
     val toolCallRecorder: ToolCallRecorder
     val openCodeRepository: OpenCodeRepository
     val agentDownloader: AgentDownloader
@@ -77,8 +77,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         LocalCommandRunner(runtimeManager)
     }
 
-    override val prootRuntime: com.omniclaw.data.local.runtime.PRootRuntime by lazy {
-        com.omniclaw.data.local.runtime.PRootRuntime(context)
+    override val termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime by lazy {
+        com.omniclaw.data.local.runtime.TermuxRuntime(context)
     }
 
     override val toolCallRecorder: ToolCallRecorder by lazy {

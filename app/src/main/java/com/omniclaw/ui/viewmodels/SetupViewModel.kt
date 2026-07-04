@@ -381,12 +381,12 @@ class SetupViewModel(
                 // via proot, giving them a full Linux environment.
                 updateInstallState(agentName, status = STATUS_CHECKING)
 
-                val prootRuntime = appContainer.prootRuntime
+                val termuxRuntime = appContainer.termuxRuntime
 
                 // Ensure rootfs is installed (extracts Alpine + installs node/npm/git)
-                if (!prootRuntime.isRootfsInstalled) {
+                if (!termuxRuntime.isInstalled) {
                     updateInstallState(agentName, progress = 0.1f, status = "Installing Linux environment...")
-                    val rootfsOk = prootRuntime.installRootfs { progress, status ->
+                    val rootfsOk = termuxRuntime.install { progress, status ->
                         updateInstallState(agentName, progress = progress * 0.5f, status = status)
                     }
                     if (!rootfsOk) {
@@ -400,11 +400,11 @@ class SetupViewModel(
                 val npmPackage = NPM_PACKAGES[agentName]
                 if (npmPackage != null) {
                     // Create agents directory inside rootfs
-                    prootRuntime.executeInRootfs("mkdir -p /agents/$targetDirName", "")
+                    termuxRuntime.executeInTermux("mkdir -p /agents/$targetDirName", "")
 
                     // npm install the agent package
                     updateInstallState(agentName, progress = 0.6f, status = STATUS_INSTALLING_DEPS)
-                    val installResult = prootRuntime.executeInRootfs(
+                    val installResult = termuxRuntime.executeInTermux(
                         "cd /agents/$targetDirName && npm init -y && npm install $npmPackage",
                         ""
                     )
@@ -503,51 +503,37 @@ class SetupViewModel(
                 // If agent code is missing, the wrapper will error gracefully
                 // with a clear message instead of "No such file or directory".
                 val entryPoint = "index.js"  // default fallback
-                val prootBinary = appContainer.prootRuntime.prootBinary
-                val prootLoader = appContainer.prootRuntime.prootLoader
-                val rootfsPath = appContainer.prootRuntime.rootfsDir.absolutePath
-                val agentsPath = appContainer.prootRuntime.agentsDir.absolutePath
-                val workspacePath = appContainer.prootRuntime.workspaceDir.absolutePath
-                val tmpPath = appContainer.prootRuntime.tmpDir.absolutePath
+                val nodePath = appContainer.termuxRuntime.getNodePath() ?: "${appContainer.termuxRuntime.binDir.absolutePath}/node"
+                val agentsPath = appContainer.termuxRuntime.agentsDir.absolutePath
+                val workspacePath = appContainer.termuxRuntime.workspaceDir.absolutePath
+                val tmpPath = appContainer.termuxRuntime.tmpDir.absolutePath
+                val prefixPath = appContainer.termuxRuntime.prefixDir.absolutePath
+                val ldPreload = "$prefixPath/lib/libtermux-exec-ld-preload.so"
 
                 val wrapperScript = """
 #!${SYSTEM_SH}
 # Orbit-AI agent wrapper for $agentName
-# Runs the agent inside a PRoot Alpine Linux environment where node,
-# npm, git, and all shared libraries are properly installed.
-export PROOT_LOADER="$prootLoader"
-export PROOT_NO_SECCOMP=1
-export PROOT_TMP_DIR="$tmpPath"
-export PROOT_L2S_DIR="$rootfsPath/.l2s"
-export HOME="/root"
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-export TERM="xterm-256color"
-export LANG="C.UTF-8"
-unset LD_PRELOAD
+# Runs the agent using Termux's node (Bionic-compiled, runs natively on Android).
+# No PRoot needed — Termux binaries use /system/bin/linker64 directly.
+export PREFIX="$prefixPath"
+export PATH="$prefixPath/bin:${'$'}PATH"
+export LD_LIBRARY_PATH="$prefixPath/lib"
+export LD_PRELOAD="$ldPreload"
+export HOME="${appContainer.termuxRuntime.runtimeDir.absolutePath}"
+export TMPDIR="$prefixPath/tmp"
+export LANG=en_US.UTF-8
+export TERM=xterm-256color
 
 # Check if agent entry point exists
-AGENT_ENTRY="/agents/$targetDirName/$entryPoint"
-if [ ! -f "$${'$'}AGENT_ENTRY" ]; then
-    echo "ERROR: Agent code not found at $${'$'}AGENT_ENTRY" >&2
+AGENT_ENTRY="$agentsPath/$targetDirName/$entryPoint"
+if [ ! -f "${'$'}AGENT_ENTRY" ]; then
+    echo "ERROR: Agent code not found at ${'$'}AGENT_ENTRY" >&2
     echo "The agent was not installed properly. Try reinstalling from Setup Wizard." >&2
     exit 1
 fi
 
-exec "$prootBinary" \
-    --kill-on-exit \
-    --link2symlink \
-    --rootfs="$rootfsPath" \
-    --cwd="/root" \
-    --change-id=0:0 \
-    --bind=/dev \
-    --bind=/proc \
-    --bind=/sys \
-    --bind=/sdcard:/sdcard \
-    --bind="$agentsPath:/agents" \
-    --bind="$workspacePath:/workspace" \
-    --bind="$tmpPath:/tmp" \
-    -- /usr/bin/node "$${'$'}AGENT_ENTRY" "${'$'}@"
-                """.trimIndent()
+exec "$nodePath" "${'$'}AGENT_ENTRY" "${'$'}@"
+""".trimIndent()
 
                 withContext(Dispatchers.IO) {
                     wrapperFile.parentFile?.mkdirs()
