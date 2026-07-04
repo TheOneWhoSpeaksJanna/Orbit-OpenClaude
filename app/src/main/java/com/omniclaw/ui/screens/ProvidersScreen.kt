@@ -424,10 +424,29 @@ private fun providerIcon(name: String): Painter = when (name) {
     "DeepSeek" -> BrandIcons.DeepSeek
     "Groq" -> BrandIcons.Groq
     "Ollama", "Ollama (Local)" -> BrandIcons.Ollama
-    "Z.AI (Free GLM)", "Z.AI" -> BrandIcons.OpenRouter // TODO: create Z.AI icon
-    else -> remember { androidx.compose.ui.graphics.painter.BitmapPainter(
-        androidx.compose.ui.graphics.ImageBitmap(1, 1)
-    ) } // fallback: empty painter, not OpenRouter
+    "Z.AI (Free GLM)", "Z.AI" -> BrandIcons.ZAI
+    "xAI (Grok)" -> BrandIcons.XAI
+    "Mistral AI" -> BrandIcons.Mistral
+    "Together AI" -> BrandIcons.Together
+    "GitHub Copilot" -> BrandIcons.GitHub
+    "NVIDIA NIM" -> BrandIcons.NVIDIA
+    "AWS Bedrock" -> BrandIcons.AWS
+    "Google Vertex AI" -> BrandIcons.Vertex
+    "Azure OpenAI" -> BrandIcons.Azure
+    "LM Studio (Local)" -> BrandIcons.LMStudio
+    "DashScope (CN)", "DashScope (Intl)" -> BrandIcons.DashScope
+    "Moonshot (Kimi)" -> BrandIcons.Moonshot
+    "Venice AI" -> BrandIcons.Venice
+    "Fireworks AI" -> BrandIcons.Fireworks
+    "MiniMax" -> BrandIcons.MiniMax
+    "Near AI" -> BrandIcons.NearAI
+    "Xiaomi MiMo" -> BrandIcons.Xiaomi
+    "Atlas Cloud" -> BrandIcons.Atlas
+    "Kimi Code" -> BrandIcons.Kimi
+    "OpenCode Gateway" -> BrandIcons.OpenCodeGateway
+    "Gitlawb OpenGateway" -> BrandIcons.OpenGateway
+    "Custom OpenAI-compatible" -> BrandIcons.Custom
+    else -> BrandIcons.Custom
 }
 
 @Composable
