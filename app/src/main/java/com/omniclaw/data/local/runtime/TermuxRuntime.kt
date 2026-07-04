@@ -6,22 +6,32 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.util.zip.ZipEntry
 
 private const val TAG = "TermuxRuntime"
 
 /**
- * Termux-based runtime — uses Termux's bootstrap zip as the root filesystem.
+ * Termux-based runtime that runs the Termux bootstrap rootfs under PRoot.
  *
- * WHY THIS WORKS WHEN ALPINE DIDN'T:
- * Termux binaries are compiled with the Android NDK against Bionic (Android's
- * libc) and use /system/bin/linker64 as their ELF interpreter — which exists
- * on EVERY Android device. Alpine binaries use musl libc + /lib/ld-musl-aarch64.so.1
- * which doesn't exist on Android.
+ * WHY PRoot IS REQUIRED:
+ *   Android 10+ (API 29+) with targetSdk >= 29 enforces W^X via SELinux:
+ *   files under /data/data/<pkg>/files/ get the `app_data_file` label,
+ *   which does NOT allow execve(). Trying to exec any binary extracted
+ *   from the Termux bootstrap zip fails with "Permission denied" (EACCES).
  *
- * With Termux's bootstrap, binaries run NATIVELY — no PRoot needed.
+ *   The ONLY writable+executable location available to a targetSdk>=29
+ *   app is /data/app/<pkg>/lib/<abi>/ (label `apk_data_file`), which is
+ *   populated at install time from jniLibs. We bundle libproot.so there.
+ *   PRoot uses ptrace to intercept every execve syscall made by its
+ *   children, so binaries inside the rootfs are mapped into memory by
+ *   proot itself (only needing read access, which app_data_file allows)
+ *   and never exec'd by the kernel.
+ *
+ * Architecture:
+ *   1. termux-bootstrap.zip -> extracted to prefixDir (app_data_file, read-only)
+ *   2. libproot.so + libproot_loader.so -> jniLibs -> /data/app/<pkg>/lib/arm64/
+ *   3. All commands run as: libproot.so -r prefixDir -b ... -- /bin/sh -c "cmd"
+ *   4. Inside the rootfs, /bin/sh, /bin/apt, /bin/node etc. all work because
+ *      proot ptrace-intercepts the execve calls.
  */
 class TermuxRuntime(private val context: Context) {
 
@@ -32,13 +42,21 @@ class TermuxRuntime(private val context: Context) {
     val workspaceDir = File(runtimeDir, "workspace")
     val tmpDir = File(runtimeDir, "tmp")
 
+    /**
+     * Directory where Android extracts jniLibs at install time.
+     * SELinux label `apk_data_file` allows execve() here — this is
+     * the ONLY place we can exec native binaries on Android 10+.
+     */
     private val nativeLibDir: String by lazy {
         context.applicationInfo.nativeLibraryDir ?: ""
     }
 
+    /** Path to the PRoot binary in the exec-allowed lib directory. */
+    val prootPath: String by lazy { "$nativeLibDir/libproot.so" }
+    val prootLoaderPath: String by lazy { "$nativeLibDir/libproot_loader.so" }
+
     val isInstalled: Boolean get() = File(binDir, "bash").exists()
 
-    // Track install progress so UI can show it
     private var _installInProgress = false
     val installInProgress: Boolean get() = _installInProgress
 
@@ -49,6 +67,12 @@ class TermuxRuntime(private val context: Context) {
         tmpDir.mkdirs()
     }
 
+    /**
+     * Install the Termux bootstrap rootfs by extracting the bundled zip.
+     * After extraction, packages (nodejs, git, python3) are installed via
+     * apt — run inside the rootfs through PRoot so apt can exec dpkg, ar,
+     * tar, etc. without hitting the W^X SELinux block.
+     */
     suspend fun install(
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): Boolean = withContext(Dispatchers.IO) {
@@ -80,13 +104,13 @@ class TermuxRuntime(private val context: Context) {
             }
             FileLogger.i(TAG, "Bootstrap zip copied", "bytes=${tempZip.length()} time=${System.currentTimeMillis() - copyStart}ms")
 
-            // Step 2: Extract using Java ZipInputStream (reliable, no dependency on system unzip)
+            // Step 2: Extract using Java ZipInputStream
             onProgress(0.1f, "Extracting rootfs (this takes a minute)...")
             FileLogger.i(TAG, "Extraction start")
             val extractStart = System.currentTimeMillis()
             var fileCount = 0
             java.util.zip.ZipInputStream(tempZip.inputStream()).use { zis ->
-                var entry: ZipEntry? = zis.nextEntry
+                var entry: java.util.zip.ZipEntry? = zis.nextEntry
                 while (entry != null) {
                     val outFile = File(prefixDir, entry.name)
                     if (entry.isDirectory) {
@@ -118,7 +142,7 @@ class TermuxRuntime(private val context: Context) {
                 var symlinkFailed = 0
                 symlinksFile.readLines().forEach { line ->
                     if (line.isBlank()) return@forEach
-                    val parts = line.split("←")
+                    val parts = line.split("\u2190")
                     if (parts.size == 2) {
                         val target = parts[0].trim().removePrefix("./")
                         val linkName = parts[1].trim().removePrefix("./")
@@ -138,34 +162,39 @@ class TermuxRuntime(private val context: Context) {
                 FileLogger.i(TAG, "Symlinks created", "count=$symlinkCount failed=$symlinkFailed time=${System.currentTimeMillis() - symlinkStart}ms")
             }
 
-            // Verify /bin/sh exists (critical — needed by all shell scripts)
             val binSh = File(prefixDir, "bin/sh")
             val binBash = File(prefixDir, "bin/bash")
             FileLogger.i(TAG, "Binary check", "sh=${binSh.exists()} bash=${binBash.exists()} sh_canonical=${binSh.canonicalPath}")
 
-            // Step 4: Set up environment
+            // Step 4: Set up apt sources.list
             onProgress(0.5f, "Configuring environment...")
-            setupTermuxEnvironment()
+            File(prefixDir, "etc/apt/sources.list.d").mkdirs()
+            File(prefixDir, "var/log").mkdirs()
+            File(prefixDir, "tmp").mkdirs()
+            val sourcesList = File(prefixDir, "etc/apt/sources.list")
+            sourcesList.parentFile?.mkdirs()
+            sourcesList.writeText("deb https://packages.termux.dev/apt/termux-main/ stable main\n")
             FileLogger.i(TAG, "Environment configured")
 
-            // Step 5: Install packages
+            // Step 5: Install packages via PRoot + apt
+            // This is the critical step that previously failed with "Permission denied"
+            // because apt, dpkg, ar etc. couldn't be exec'd from app_data_file.
+            // Now they run under PRoot, which ptrace-intercepts the execve calls.
             onProgress(0.6f, "Installing nodejs, git, python3 (downloads ~50MB)...")
             FileLogger.i(TAG, "pkg install start", "packages=nodejs,git,python3")
             val pkgStart = System.currentTimeMillis()
-            val pkgResult = executeInTermux("apt update 2>&1 && apt install -y nodejs git python3 2>&1")
+            val pkgResult = executeInTermux("apt update -y && apt install -y nodejs git python3")
             val pkgDuration = System.currentTimeMillis() - pkgStart
             FileLogger.i(TAG, "pkg install result", "exit=${pkgResult.exitCode} time=${pkgDuration}ms output=${pkgResult.output.take(500)}")
 
             if (pkgResult.exitCode != 0) {
                 FileLogger.w(TAG, "pkg install had issues, checking what's available")
-                // Check if node was installed despite errors
                 val nodeCheck = File(binDir, "node")
                 if (!nodeCheck.exists()) {
                     FileLogger.e(TAG, "Node not found after install", "path=${nodeCheck.absolutePath}")
                 }
             }
 
-            // Step 6: Install npm (comes with nodejs in Termux, but verify)
             val npmCheck = File(binDir, "npm")
             FileLogger.i(TAG, "Tool check", "node=${File(binDir, "node").exists()} npm=${npmCheck.exists()} git=${File(binDir, "git").exists()}")
 
@@ -184,29 +213,21 @@ class TermuxRuntime(private val context: Context) {
         }
     }
 
-    private fun setupTermuxEnvironment() {
-        File(prefixDir, "etc/apt/sources.list.d").mkdirs()
-        File(prefixDir, "var/log").mkdirs()
-        File(prefixDir, "tmp").mkdirs()
-
-        val sourcesList = File(prefixDir, "etc/apt/sources.list")
-        sourcesList.parentFile?.mkdirs()
-        sourcesList.writeText("deb https://packages.termux.dev/apt/termux-main/ stable main\n")
-
-        val envScript = File(prefixDir, "bin/orbit-env")
-        envScript.writeText("""#!/system/bin/sh
-export PREFIX="${prefixDir.absolutePath}"
-export PATH="${prefixDir.absolutePath}/bin:${nativeLibDir}:/system/bin:/system/xbin"
-export LD_LIBRARY_PATH="${prefixDir.absolutePath}/lib:${nativeLibDir}"
-export LD_PRELOAD="${prefixDir.absolutePath}/lib/libtermux-exec-ld-preload.so"
-export HOME="${runtimeDir.absolutePath}"
-export TMPDIR="${prefixDir.absolutePath}/tmp"
-export LANG=en_US.UTF-8
-export TERM=xterm-256color
-""")
-        envScript.setExecutable(true)
-    }
-
+    /**
+     * Execute a command inside the Termux rootfs under PRoot.
+     *
+     * PRoot flags used:
+     *   --kill-on-exit     — kill all children if proot dies
+     *   -0                 — fake root uid (some scripts expect this)
+     *   --link2symlink     — required on Android for hardlink emulation
+     *   -r <rootfs>        — use prefixDir as the root
+     *   -b <src>:<dst>     — bind mount (Android system dirs + our dirs)
+     *   -w <dir>           — set working dir inside rootfs
+     *
+     * The command is passed to /bin/sh -c inside the rootfs. All execve
+     * calls made by sh (and its children) are intercepted by proot via
+     * ptrace, so binaries in the rootfs run despite being on app_data_file.
+     */
     suspend fun executeInTermux(
         command: String,
         stdin: String = ""
@@ -219,22 +240,46 @@ export TERM=xterm-256color
         FileLogger.d(TAG, "Termux exec start", "cmd=${command.take(200)}")
 
         try {
-            val fullCommand = ". ${prefixDir.absolutePath}/bin/orbit-env && $command"
-            val pb = ProcessBuilder("/system/bin/sh", "-c", fullCommand)
+            // Build PRoot argv
+            val prootArgs = mutableListOf(
+                prootPath,
+                "--kill-on-exit",
+                "-0",
+                "--link2symlink",
+                "-r", prefixDir.absolutePath,
+                // Bind Android system directories so binaries can find libs, /dev, /proc etc.
+                "-b", "/dev",
+                "-b", "/proc",
+                "-b", "/sys",
+                "-b", "/system",
+                "-b", "/vendor",
+                "-b", "/apex",
+                "-b", "/odm",
+                "-b", "/data/local/tmp:/tmp",
+                // Make our runtime dir visible inside the rootfs at /orbit
+                "-b", "$runtimeDir:/orbit",
+                // Set working directory to / (inside rootfs)
+                "-w", "/",
+                // Exec /bin/sh -c "command"
+                "/bin/sh", "-c", command
+            )
+
+            val pb = ProcessBuilder(prootArgs)
             pb.directory(runtimeDir)
 
             val env = pb.environment()
+            // PRoot loader path (proot dlopens this for ptrace injection)
+            env["PROOT_LOADER"] = prootLoaderPath
+            env["PROOT_LOADER_32"] = prootLoaderPath
+            env["PROOT_TMP_DIR"] = tmpDir.absolutePath
+            // Inside the rootfs, set up Termux-like env
             env["PREFIX"] = prefixDir.absolutePath
-            env["PATH"] = "${prefixDir.absolutePath}/bin:${nativeLibDir}:/system/bin:/system/xbin"
-            env["LD_LIBRARY_PATH"] = "${prefixDir.absolutePath}/lib:${nativeLibDir}"
-            val ldPreload = File(prefixDir, "lib/libtermux-exec-ld-preload.so")
-            if (ldPreload.exists()) {
-                env["LD_PRELOAD"] = ldPreload.absolutePath
-            }
-            env["HOME"] = runtimeDir.absolutePath
-            env["TMPDIR"] = File(prefixDir, "tmp").absolutePath
+            env["PATH"] = "/bin:/usr/bin:/sbin:/usr/sbin"
+            env["HOME"] = "/root"
+            env["TMPDIR"] = "/tmp"
             env["LANG"] = "en_US.UTF-8"
             env["TERM"] = "xterm-256color"
+            env["LD_LIBRARY_PATH"] = "/lib:/usr/lib"
 
             val process = pb.start()
 
@@ -285,10 +330,18 @@ export TERM=xterm-256color
 
     fun isToolInstalled(tool: String): Boolean = File(binDir, tool).exists()
 
+    /**
+     * Returns the path to node INSIDE the rootfs (e.g. /data/.../bin/node).
+     * Callers that want to exec node directly must do so via executeInTermux()
+     * — direct execve on this path will be blocked by SELinux.
+     */
     fun getNodePath(): String? {
         val node = File(binDir, "node")
         return if (node.exists() && node.canExecute()) node.absolutePath else null
     }
+
+    fun getPrefixPath(): String = prefixDir.absolutePath
+    fun getRuntimePath(): String = runtimeDir.absolutePath
 }
 
 data class CommandResult(

@@ -21,6 +21,7 @@
         android:label="${appLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:extractNativeLibs="true"
         android:theme="@style/Theme.OmniClaw">
         <activity
             android:name=".MainActivity"

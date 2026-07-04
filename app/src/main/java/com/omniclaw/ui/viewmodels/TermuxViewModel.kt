@@ -109,12 +109,14 @@ class TermuxViewModel(
                 )
             )
 
-            // Install via apk inside PRoot Alpine environment
-            FileLogger.i(TAG, "apk install start", "tool=$toolName")
-            val result = termuxRuntime.executeInTermux("apk add --no-cache $toolName", "")
+            // Install via apt inside PRoot Termux rootfs.
+            // Termux uses apt (Debian-style), not apk (Alpine). Running under
+            // PRoot lets apt exec dpkg, ar, tar etc. via ptrace interception.
+            FileLogger.i(TAG, "apt install start", "tool=$toolName")
+            val result = termuxRuntime.executeInTermux("apt install -y $toolName", "")
             val success = result.exitCode == 0
             val finalStatus = if (success) "$SUCCESS_PREFIX$toolName." else "$FAILURE_PREFIX$toolName: ${result.output.take(200)}"
-            FileLogger.i(TAG, "apk install result", "success=$success exit=${result.exitCode}")
+            FileLogger.i(TAG, "apt install result", "success=$success exit=${result.exitCode}")
 
             repository.insertTermuxLog(
                 TermuxLog(

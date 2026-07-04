@@ -421,16 +421,19 @@ class SetupViewModel(
 
                 updateInstallState(agentName, progress = 0.5f, status = "$STATUS_DOWNLOADING$agentName...")
 
-                // Install the agent via npm inside the PRoot environment
+                // Install the agent via npm inside the PRoot environment.
+                // Inside PRoot, /orbit is bind-mounted to runtimeDir, so
+                // /orbit/agents/<name> persists across app restarts.
                 val npmPackage = NPM_PACKAGES[agentName]
                 if (npmPackage != null) {
-                    // Create agents directory inside rootfs
-                    termuxRuntime.executeInTermux("mkdir -p /agents/$targetDirName", "")
+                    // Create agents directory (visible inside rootfs at /orbit/agents)
+                    termuxRuntime.executeInTermux("mkdir -p /orbit/agents/$targetDirName", "")
 
-                    // npm install the agent package
+                    // npm install the agent package — runs under PRoot so
+                    // node, npm, git etc. all exec via ptrace interception.
                     updateInstallState(agentName, progress = 0.6f, status = STATUS_INSTALLING_DEPS)
                     val installResult = termuxRuntime.executeInTermux(
-                        "cd /agents/$targetDirName && npm init -y && npm install $npmPackage",
+                        "cd /orbit/agents/$targetDirName && npm init -y && npm install $npmPackage",
                         ""
                     )
                     if (installResult.exitCode != 0) {
@@ -517,54 +520,38 @@ class SetupViewModel(
                     }
                 }
 
-                // ── Create wrapper script that uses PRoot ─────────────────
-                // The wrapper calls proot to run the agent inside the Alpine
-                // rootfs, where node is at /usr/bin/node and all shared libs
-                // are available. This is the RELIABLE path.
+                // ── Store runCommand as a rootfs-relative command string ──
+                // Previously we created a wrapper shell script at bin/<name>
+                // and stored its absolute path as runCommand. That doesn't
+                // work on Android 10+ because wrapper scripts in app-private
+                // storage can't be exec'd (SELinux W^X block on app_data_file).
+                //
+                // Instead, runCommand is now a command string that gets
+                // executed inside the Termux rootfs via PRoot. ChatViewModel
+                // calls termuxRuntime.executeInTermux(runCommand, stdin).
+                // The command runs as /bin/sh -c "<runCommand>" under PRoot,
+                // so node, npm, git etc. all exec via ptrace interception.
                 updateInstallState(agentName, progress = 0.9f, status = STATUS_CREATING_SCRIPT)
 
-                // Always create the wrapper script, even if npm install failed.
-                // The wrapper uses PRoot to run the agent inside Alpine rootfs.
-                // If agent code is missing, the wrapper will error gracefully
-                // with a clear message instead of "No such file or directory".
-                val entryPoint = "index.js"  // default fallback
-                val nodePath = appContainer.termuxRuntime.getNodePath() ?: "${appContainer.termuxRuntime.binDir.absolutePath}/node"
-                val agentsPath = appContainer.termuxRuntime.agentsDir.absolutePath
-                val workspacePath = appContainer.termuxRuntime.workspaceDir.absolutePath
-                val tmpPath = appContainer.termuxRuntime.tmpDir.absolutePath
-                val prefixPath = appContainer.termuxRuntime.prefixDir.absolutePath
-                val ldPreload = "$prefixPath/lib/libtermux-exec-ld-preload.so"
+                // Find the actual entry point of the installed agent.
+                // npm install puts the package under node_modules/<pkg>/,
+                // but most CLI agents expose a bin entry that we can call
+                // directly. Default to the package's main entry.
+                val agentEntry = "node /orbit/agents/$targetDirName/index.js"
+                FileLogger.i("SetupViewModel", "Agent runCommand set", "cmd=$agentEntry")
 
-                val wrapperScript = """
-#!${SYSTEM_SH}
-# Orbit-AI agent wrapper for $agentName
-# Runs the agent using Termux's node (Bionic-compiled, runs natively on Android).
-# No PRoot needed — Termux binaries use /system/bin/linker64 directly.
-export PREFIX="$prefixPath"
-export PATH="$prefixPath/bin:${'$'}PATH"
-export LD_LIBRARY_PATH="$prefixPath/lib"
-export LD_PRELOAD="$ldPreload"
-export HOME="${appContainer.termuxRuntime.runtimeDir.absolutePath}"
-export TMPDIR="$prefixPath/tmp"
-export LANG=en_US.UTF-8
-export TERM=xterm-256color
-
-# Check if agent entry point exists
-AGENT_ENTRY="$agentsPath/$targetDirName/$entryPoint"
-if [ ! -f "${'$'}AGENT_ENTRY" ]; then
-    echo "ERROR: Agent code not found at ${'$'}AGENT_ENTRY" >&2
-    echo "The agent was not installed properly. Try reinstalling from Setup Wizard." >&2
-    exit 1
-fi
-
-exec "$nodePath" "${'$'}AGENT_ENTRY" "${'$'}@"
-""".trimIndent()
-
-                withContext(Dispatchers.IO) {
-                    wrapperFile.parentFile?.mkdirs()
-                    wrapperFile.writeText(wrapperScript)
-                    FileLogger.i("SetupViewModel", "Agent wrapper created", "path=${wrapperFile.absolutePath}")
-                    makeExecutable(wrapperFile)
+                // Persist the runCommand to the agent entity immediately
+                // so ChatViewModel can find it. completeSetup() also sets
+                // this, but setting it here ensures it's correct even if
+                // completeSetup's insertAgent already ran with a stale value.
+                try {
+                    val existingAgent = repository.getAllAgents().firstOrNull()
+                        ?.find { it.id == agentName.lowercase().replace(" ", "-") }
+                    if (existingAgent != null) {
+                        repository.insertAgent(existingAgent.copy(runCommand = agentEntry))
+                    }
+                } catch (e: Exception) {
+                    FileLogger.w("SetupViewModel", "Could not update agent runCommand", "reason=${e.message}")
                 }
 
                 updateInstallState(agentName, progress = 1f, status = "$agentName$STATUS_INSTALLED", isInstalled = true)
@@ -716,14 +703,19 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
 
             val agentName = _selectedAgent.value
             val sysPrompt = SYSTEM_PROMPTS[agentName] ?: "You are an expert AI assistant."
-            val wrapperName = AGENT_WRAPPER_NAMES[agentName] ?: agentName.lowercase()
+            val targetDirName = AGENT_INSTALL_DIRS[agentName] ?: agentName.lowercase().replace(" ", "-")
+
+            // runCommand is now a command string executed inside the Termux
+            // rootfs via PRoot (not a wrapper script path). ChatViewModel
+            // calls termuxRuntime.executeInTermux(runCommand, stdin).
+            val runCommand = "node /orbit/agents/$targetDirName/index.js"
 
             val agent = Agent(
                 id = agentName.lowercase().replace(" ", "-"),
                 name = agentName,
                 description = AGENT_DESC,
                 systemPrompt = sysPrompt,
-                runCommand = File(runtimeManager.binDir, wrapperName).absolutePath
+                runCommand = runCommand
             )
             repository.insertAgent(agent)
 

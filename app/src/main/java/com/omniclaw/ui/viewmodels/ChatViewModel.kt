@@ -9,6 +9,7 @@ import com.omniclaw.OmniClawApplication
 import com.omniclaw.data.local.runner.LocalCommandRunner
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runtime.PackageInstaller
+import com.omniclaw.data.local.runtime.TermuxRuntime
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
 import com.omniclaw.domain.models.ChatSession
@@ -47,7 +48,8 @@ class ChatViewModel(
     private val localCommandRunner: LocalCommandRunner,
     private val prefsManager: PreferencesManager,
     private val openCodeRepository: OpenCodeRepository,
-    private val packageInstaller: PackageInstaller
+    private val packageInstaller: PackageInstaller,
+    private val termuxRuntime: TermuxRuntime
 ) : ViewModel() {
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
@@ -250,85 +252,19 @@ class ChatViewModel(
                 }
 
                 if (runCmd.isNullOrBlank()) {
-                    runCmd = activeAgentId
+                    // No runCommand stored — fall back to the standard
+                    // rootfs-relative path for the active agent id.
+                    runCmd = "node /orbit/agents/$activeAgentId/index.js"
                 }
 
-                // Runtime safety net: if the agent wrapper is missing, try to
-                // recreate it with the same resilient runtime-searching pattern
-                // used in SetupViewModel. If the agent CODE is also missing,
-                // show a clear error instead of "No such file or directory".
-                runCmd?.let { cmd ->
-                    val cmdFile = File(cmd)
-                    if (!cmdFile.exists()) {
-                        com.omniclaw.core.logging.FileLogger.w("ChatViewModel", "Agent wrapper missing, recreating", "path=${cmdFile.absolutePath}")
-                        val agentDir = File(cmdFile.parentFile?.parentFile, "agents/${cmdFile.name}")
-                        if (agentDir.exists()) {
-                            try {
-                                val entryPoint = listOf("dist/index.js", "index.js", "main.js")
-                                    .firstOrNull { File(agentDir, it).exists() } ?: "index.js"
-                                cmdFile.parentFile?.mkdirs()
-                                val binDirPath = cmdFile.parentFile?.absolutePath ?: ""
-                                val runtimeDirPath = cmdFile.parentFile?.parentFile?.absolutePath ?: ""
-                                val packagesDirPath = "$runtimeDirPath/packages"
-
-                                // Create a resilient wrapper that searches for node at runtime
-                                cmdFile.writeText("""
-#!$SYSTEM_SH
-# Orbit-AI agent wrapper (recreated by ChatViewModel safety net)
-# Searches for node at runtime.
-AGENT_ENTRY="${agentDir.absolutePath}/${entryPoint}"
-
-NODE=""
-for candidate in \
-    "$packagesDirPath/nodejs/usr/bin/node" \
-    "$packagesDirPath/node/bin/node" \
-    "$${'$'}(command -v node 2>/dev/null)"; do
-    if [ -x "$${'$'}candidate" ]; then
-        NODE="$${'$'}candidate"
-        break
-    fi
-done
-
-if [ -z "$${'$'}NODE" ]; then
-    echo "ERROR: Node.js binary not found. Run: omniclaw-pkg install nodejs" >&2
-    exit 1
-fi
-
-NODE_LIB_DIR="$packagesDirPath/nodejs/usr/lib"
-if [ -d "$${'$'}NODE_LIB_DIR" ]; then
-    export LD_LIBRARY_PATH="$${'$'}NODE_LIB_DIR:$${'$'}LD_LIBRARY_PATH"
-fi
-export PATH="$binDirPath:$${'$'}PATH"
-exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
-""".trimIndent())
-                                cmdFile.setExecutable(true)
-                                com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent wrapper recreated", "path=${cmdFile.absolutePath}")
-                            } catch (e: Exception) {
-                                com.omniclaw.core.logging.FileLogger.e("ChatViewModel", "Wrapper recreation failed", e, "reason=${e.message}")
-                            }
-                        } else {
-                            com.omniclaw.core.logging.FileLogger.e("ChatViewModel", "Agent code not found", "path=${agentDir.absolutePath} reason=agent never installed")
-                        }
-                    } else if (cmdFile.isFile && !cmdFile.canExecute()) {
-                        try {
-                            cmdFile.setExecutable(true)
-                            if (!cmdFile.canExecute()) {
-                                localCommandRunner.executeCommand("chmod +x " + cmdFile.absolutePath)
-                            }
-                        } catch (_: Exception) { /* best effort */ }
-                    }
-                }
-
-                // Guard: if the agent wrapper still doesn't exist after the
-                // safety net above, fail with a clear user-facing error.
-                val cmdFile = File(runCmd)
-                if (!cmdFile.exists()) {
+                // Guard: if the Termux rootfs isn't installed yet, fail with
+                // a clear user-facing error instead of a confusing PRoot error.
+                if (!termuxRuntime.isInstalled) {
                     val errMsg = Message(
                         id = UUID.randomUUID().toString(),
                         sessionId = session.id,
                         role = MessageRole.MODEL,
-                        content = "Agent is not installed yet. Go to Setup Wizard and install an agent first, " +
-                            "or install it from the terminal by running the setup again.",
+                        content = "The Linux runtime is not installed yet. Go to Setup Wizard and complete setup first.",
                         timestamp = System.currentTimeMillis()
                     )
                     repository.insertMessage(errMsg)
@@ -336,12 +272,17 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
                     return@launch
                 }
 
-                // Run agent via the wrapper script.
+                // Run agent via PRoot. runCmd is a command string like
+                // `node /orbit/agents/openclaude/index.js` that gets executed
+                // as /bin/sh -c "<runCmd>" inside the Termux rootfs under PRoot.
+                // PRoot ptrace-intercepts all execve calls made by node and
+                // its children, so binaries in app-private storage run despite
+                // the SELinux W^X block on app_data_file.
                 try {
-                    com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec start", "cmd=$runCmd content=${content.take(80)}")
-                    val safeRunCmd = if (runCmd.startsWith('/')) "sh ${runCmd}" else runCmd
-                    val escaped = content.replace("\"", "\\\"")
-                    val result = localCommandRunner.executeCommand("echo \"$escaped\" | $safeRunCmd")
+                    com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec start (PRoot)", "cmd=$runCmd content=${content.take(80)}")
+                    val escaped = content.replace("\"", "\\\"").replace("`", "\\`").replace("$", "\\$")
+                    val fullCmd = "echo \"$escaped\" | $runCmd"
+                    val result = termuxRuntime.executeInTermux(fullCmd, "")
                     com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec result", "exit=${result.exitCode} output=${result.output.take(150)}")
                     val modelMsg = Message(
                         id = UUID.randomUUID().toString(),
@@ -522,7 +463,8 @@ exec "$${'$'}NODE" "$${'$'}AGENT_ENTRY" "$${'$'}@"
                     application.container.localCommandRunner,
                     application.container.prefsManager,
                     application.container.openCodeRepository,
-                    application.container.packageInstaller
+                    application.container.packageInstaller,
+                    application.container.termuxRuntime
                 ) as T
             }
         }
