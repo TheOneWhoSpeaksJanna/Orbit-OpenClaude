@@ -333,7 +333,10 @@ class TermuxRuntime(private val context: Context) {
             val prootArgs = mutableListOf(
                 prootPath,
                 "--kill-on-exit",
-                "-L",  // fix_symlink_size — CRITICAL for Termux dpkg
+                // NOTE: -L (fix_symlink_size) is not in this PRoot build.
+                // It's only needed when --link2symlink creates fake symlinks.
+                // Since we don't use --link2symlink, our symlinks are real
+                // kernel-level symlinks and lstat returns correct sizes.
                 "-r", rootfsDir.absolutePath,
                 // Bind Android system directories so binaries can find libs, /dev, /proc etc.
                 "-b", "/dev",
