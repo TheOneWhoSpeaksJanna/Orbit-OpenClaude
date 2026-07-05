@@ -248,12 +248,14 @@ fun ChatScreen(
                         ) {
                             IconButton(
                                 onClick = {
-                                    if (inputText.isNotBlank()) {
+                                    if (inputText.isNotBlank() && !isLoading) {
                                         viewModel.sendMessage(inputText.trim())
                                         inputText = ""
                                     }
                                 },
-                                enabled = inputText.isNotBlank()
+                                // Disable while loading to prevent concurrent
+                                // AI loop coroutines from corrupting chat state.
+                                enabled = inputText.isNotBlank() && !isLoading
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.Send,

@@ -180,9 +180,22 @@ class LocalCommandRunner(
                 String::class.java
             )
             newProcessMethod.isAccessible = true
-            val process = newProcessMethod.invoke(
+            val processObj = newProcessMethod.invoke(
                 null, shellCommand(command).toTypedArray(), null, null
-            ) as Process
+            )
+            // Safe-cast — Shizuku API is invoked via reflection and could
+            // return null or a wrapper type on version mismatch. Without
+            // this guard, a ClassCastException would be caught as a generic
+            // Exception and the user would get a useless error message.
+            val process = processObj as? Process ?: run {
+                FileLogger.e(TAG, "Shizuku newProcess returned non-Process",
+                    "type=${processObj?.javaClass?.name}")
+                return@withContext CommandResult(
+                    "Shizuku API mismatch: newProcess returned ${processObj?.javaClass?.name}",
+                    ERROR_EXIT_CODE,
+                    command
+                )
+            }
 
             val output = buildString {
                 BufferedReader(InputStreamReader(process.inputStream)).use { reader ->

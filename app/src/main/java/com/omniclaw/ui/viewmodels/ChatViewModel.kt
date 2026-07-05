@@ -81,6 +81,12 @@ class ChatViewModel(
     private var loopActiveModelName = ""
     private var loopApiKey = ""
 
+    // Track the in-flight AI loop coroutine so we can cancel it before
+    // relaunching. Without this, two rapid sendMessage() calls would
+    // launch two loop coroutines that both read/write the loop fields
+    // concurrently, corrupting the chat history and doubling API calls.
+    private var loopJob: kotlinx.coroutines.Job? = null
+
     private val _pendingCommand = MutableStateFlow<PendingCommand?>(null)
     val pendingCommand: StateFlow<PendingCommand?> = _pendingCommand.asStateFlow()
 
@@ -371,7 +377,11 @@ class ChatViewModel(
     }
 
     private fun continueAiLoop() {
-        viewModelScope.launch {
+        // Cancel any previous loop coroutine before launching a new one.
+        // This prevents two loop coroutines from running concurrently and
+        // corrupting the shared loopPromptBuilder / loopSessionId state.
+        loopJob?.cancel()
+        loopJob = viewModelScope.launch {
             while (loopContinueLooping) {
                 val result = aiProvider.generateContent(
                     loopPromptBuilder.toString(), loopApiKey, loopActiveProvider, loopActiveModelName

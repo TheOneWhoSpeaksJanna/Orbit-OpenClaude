@@ -382,16 +382,37 @@ class SetupViewModel(
     fun installOpenCode() = installAgent(AGENT_OPENCODE)
     fun installCodex() = installAgent(AGENT_CODEX)
 
+    // Track in-flight install jobs per agent to prevent duplicate concurrent installs.
+    // A second installAgent() call while one is running is a no-op.
+    private val installJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+
     fun installAgent(agentName: String) {
+        // Synchronous guard — check BEFORE launching so a rapid double-tap
+        // sees isInstalling=true and bails out. Without this, two coroutines
+        // could both run npm install concurrently and corrupt the global
+        // package metadata lockfile.
+        val currentState = _agentInstallStates.value[agentName]
+        if (currentState?.isInstalling == true) {
+            FileLogger.w("SetupViewModel", "installAgent already in progress, ignoring", "agent=$agentName")
+            return
+        }
+
+        // Cancel any previous job (shouldn't exist due to guard above, but
+        // defensive in case state was reset externally)
+        installJobs[agentName]?.cancel()
+
         val targetDirName = AGENT_INSTALL_DIRS[agentName] ?: agentName.lowercase().replace(" ", "-")
 
-        viewModelScope.launch {
-            _agentInstallStates.value = _agentInstallStates.value + (agentName to AgentInstallState(
-                isInstalling = true,
-                progress = 0f,
-                status = STATUS_STARTING,
-                isInstalled = false
-            ))
+        // Set isInstalling=true SYNCHRONOUSLY before launch so the UI
+        // can disable the button on the next frame before a second tap.
+        _agentInstallStates.value = _agentInstallStates.value + (agentName to AgentInstallState(
+            isInstalling = true,
+            progress = 0f,
+            status = STATUS_STARTING,
+            isInstalled = false
+        ))
+
+        installJobs[agentName] = viewModelScope.launch {
 
             try {
                 // ── NEW ARCHITECTURE: Use PRoot + Alpine rootfs ──────────
@@ -480,7 +501,14 @@ class SetupViewModel(
                 FileLogger.e("SetupViewModel", "Agent install failed", e, "reason=${e.message}")
                 updateInstallState(agentName, status = "$STATUS_FAILED${e.message}", isInstalled = false)
             } finally {
-                _agentInstallStates.value = _agentInstallStates.value + (agentName to _agentInstallStates.value[agentName]!!.copy(isInstalling = false))
+                // Safe access — the entry might not exist if the map was
+                // reset externally. Use ?: return@launch to avoid NPE.
+                val current = _agentInstallStates.value[agentName]
+                if (current != null) {
+                    _agentInstallStates.value = _agentInstallStates.value +
+                        (agentName to current.copy(isInstalling = false))
+                }
+                installJobs.remove(agentName)
             }
         }
     }
@@ -576,8 +604,16 @@ class SetupViewModel(
     }
 
     fun completeSetup() {
+        // Synchronous guard — prevent double-fire from rapid taps on
+        // the "Finish Setup" button. Without this, two coroutines could
+        // both run installAgent() and corrupt the npm global lockfile.
+        if (_setupPhase.value == SetupPhase.FINALIZING) {
+            FileLogger.w("SetupViewModel", "completeSetup already in progress, ignoring")
+            return
+        }
+        _setupPhase.value = SetupPhase.FINALIZING
+
         viewModelScope.launch {
-            _setupPhase.value = SetupPhase.FINALIZING
             FileLogger.i("SetupViewModel", "completeSetup start", "agent=${_selectedAgent.value}")
 
             prefsManager.setThemeMode(_theme.value)
@@ -651,8 +687,15 @@ class SetupViewModel(
      * User clicked Retry on the failure state. Re-runs the install.
      */
     fun retryInstall() {
+        // Synchronous guard — prevent double-fire from rapid taps on the
+        // Retry button in the FinalizingOverlay's FAILED state.
+        if (_setupPhase.value == SetupPhase.FINALIZING) {
+            FileLogger.w("SetupViewModel", "retryInstall already in progress, ignoring")
+            return
+        }
+        _setupPhase.value = SetupPhase.FINALIZING
+
         viewModelScope.launch {
-            _setupPhase.value = SetupPhase.FINALIZING
             val agentName = _selectedAgent.value
             FileLogger.i("SetupViewModel", "retryInstall start", "agent=$agentName")
             _agentInstallStates.value = _agentInstallStates.value + (agentName to
