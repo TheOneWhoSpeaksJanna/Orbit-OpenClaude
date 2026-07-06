@@ -24,6 +24,11 @@ orbit-ai-apks-*/
 app/src/*/assets/agent.tar.gz
 app/src/*/assets/agent.meta
 
+# Offline .deb packages are downloaded by the downloadOfflinePackages*
+# Gradle tasks during build. They're ~120MB per flavor and regenerated
+# from packages.termux.dev — don't commit them.
+app/src/*/assets/offline-debs/
+
 # NOTE: debug.keystore is intentionally NOT gitignored.
 # It must be committed so all builds (CI + local) use the same signing
 # certificate, otherwise update-installs fail with "already existing package"
