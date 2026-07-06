@@ -544,81 +544,95 @@ class SetupViewModel(
     /**
      * Determine the correct runCommand for the agent.
      *
-     * Tries multiple strategies in order:
-     * 1. Check if binaryName exists in $PREFIX/bin/ (ideal — npm created a symlink)
-     * 2. Check npm's global bin directory for the binary
-     * 3. Find the package's main entry point via `node -e "require.resolve(...)"`
-     * 4. Fall back to `npx <package>` (always works, slightly slower)
+     * The problem: `npm install -g` creates a symlink in $PREFIX/bin/ that
+     * points to a JS file with shebang `#!/usr/bin/env node`. But `/usr/bin/env`
+     * doesn't exist in Termux (Termux uses $PREFIX/bin/env). So the shell
+     * reports "openclaude: not found" even though the file exists.
      *
-     * Returns a command string that ChatViewModel runs via executeInTermux().
+     * Solution: Instead of using the binary name directly, resolve the symlink
+     * to find the actual JS file and run it with `node <path>`. This bypasses
+     * the broken shebang entirely.
      */
     private suspend fun determineAgentEntryPoint(
         termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime,
         binaryName: String,
         npmPackage: String?
     ): String {
-        // Strategy 1: Check if binary exists in $PREFIX/bin/
-        val checkBin = termuxRuntime.executeInTermux(
-            "which $binaryName 2>/dev/null || ls \$PREFIX/bin/$binaryName 2>/dev/null || echo NOT_FOUND",
-            ""
-        )
-        FileLogger.i("SetupViewModel", "Agent binary check",
-            "binaryName=$binaryName result=${checkBin.output.trim()}")
-        if (checkBin.output.trim() != "NOT_FOUND" && checkBin.output.trim().isNotEmpty()) {
-            FileLogger.i("SetupViewModel", "Using binary from PATH", "name=$binaryName")
-            return binaryName
+        // Strategy 1: Try to actually execute the binary. If it works, use it.
+        // (This catches the shebang issue — the file exists but can't be exec'd)
+        if (npmPackage != null) {
+            val testExec = termuxRuntime.executeInTermux(
+                "$binaryName --version 2>&1 || $binaryName --help 2>&1 || echo EXEC_FAILED",
+                ""
+            )
+            val execOutput = testExec.output.trim()
+            emitLog("SetupViewModel", "Binary exec test", "exit=${testExec.exitCode} output=${execOutput.take(200)}")
+
+            if (testExec.exitCode == 0 && !execOutput.contains("not found") && !execOutput.contains("EXEC_FAILED")) {
+                emitLog("SetupViewModel", "Binary executes correctly", "name=$binaryName")
+                return binaryName
+            }
+            emitLog("SetupViewModel", "Binary can't execute (shebang issue)", "name=$binaryName")
         }
 
-        // Strategy 2: List all files in $PREFIX/bin/ that might be the agent
-        val listBin = termuxRuntime.executeInTermux(
-            "ls \$PREFIX/bin/ 2>/dev/null | head -50",
-            ""
-        )
-        FileLogger.i("SetupViewModel", "PREFIX/bin contents", "files=${listBin.output.take(1000)}")
-
-        // Strategy 3: Find the package's main entry point via node
+        // Strategy 2: Resolve the symlink to find the actual JS file.
+        // $PREFIX/bin/openclaude -> ../lib/node_modules/@gitlawb/openclaude/cli.js
         if (npmPackage != null) {
-            // Try to resolve the package's main entry
+            val resolveSymlink = termuxRuntime.executeInTermux(
+                "readlink -f \$PREFIX/bin/$binaryName 2>/dev/null || echo SYMLINK_FAILED",
+                ""
+            )
+            val resolvedPath = resolveSymlink.output.trim()
+            emitLog("SetupViewModel", "Symlink resolve", "path=$resolvedPath")
+
+            if (resolvedPath != "SYMLINK_FAILED" && resolvedPath.isNotEmpty() && resolvedPath.endsWith(".js")) {
+                emitLog("SetupViewModel", "Using node with resolved path", "path=$resolvedPath")
+                return "node \"$resolvedPath\""
+            }
+        }
+
+        // Strategy 3: Find the package's main entry point via node require.resolve
+        if (npmPackage != null) {
             val resolveResult = termuxRuntime.executeInTermux(
                 "node -e \"try{console.log(require.resolve('$npmPackage'))}catch(e){console.log('RESOLVE_FAILED')}\" 2>/dev/null",
                 ""
             )
             val resolvedPath = resolveResult.output.trim()
-            FileLogger.i("SetupViewModel", "Node resolve result",
-                "package=$npmPackage path=$resolvedPath")
+            emitLog("SetupViewModel", "Node resolve result", "path=$resolvedPath")
             if (resolvedPath != "RESOLVE_FAILED" && resolvedPath.isNotEmpty() && !resolvedPath.startsWith("Error")) {
-                FileLogger.i("SetupViewModel", "Using node with resolved path", "path=$resolvedPath")
+                emitLog("SetupViewModel", "Using node with resolved path", "path=$resolvedPath")
                 return "node \"$resolvedPath\""
             }
+        }
 
-            // Strategy 3b: Find the package directory and look for common entry points
+        // Strategy 4: Find via filesystem search
+        if (npmPackage != null) {
             val findEntry = termuxRuntime.executeInTermux(
-                "find \$PREFIX/lib/node_modules/$npmPackage -maxdepth 1 -name '*.js' -o -name 'cli.js' -o -name 'index.js' -o -name 'main.js' 2>/dev/null | head -5",
+                "find \$PREFIX/lib/node_modules/$npmPackage -maxdepth 2 \\( -name 'cli.js' -o -name 'index.js' -o -name 'main.js' \\) 2>/dev/null | head -5",
                 ""
             )
             val foundFiles = findEntry.output.trim()
-            FileLogger.i("SetupViewModel", "Find entry points", "files=$foundFiles")
+            emitLog("SetupViewModel", "Find entry points", "files=$foundFiles")
             if (foundFiles.isNotEmpty()) {
-                // Pick the most likely entry point
                 val entry = foundFiles.split("\n").firstOrNull { it.contains("cli.js") }
                     ?: foundFiles.split("\n").firstOrNull { it.contains("index.js") }
                     ?: foundFiles.split("\n").firstOrNull { it.contains("main.js") }
                     ?: foundFiles.split("\n").firstOrNull()
                 if (entry != null && entry.isNotEmpty()) {
-                    FileLogger.i("SetupViewModel", "Using node with found entry", "path=$entry")
+                    emitLog("SetupViewModel", "Using node with found entry", "path=$entry")
                     return "node \"$entry\""
                 }
             }
         }
 
-        // Strategy 4: Fall back to npx (always works for npm packages)
+        // Strategy 5: Fall back to npx (always works for npm packages)
         if (npmPackage != null) {
-            FileLogger.w("SetupViewModel", "Falling back to npx", "package=$npmPackage")
+            emitLog("SetupViewModel", "Falling back to npx", "package=$npmPackage")
             return "npx $npmPackage"
         }
 
-        // Last resort: just use the binary name and hope for the best
-        FileLogger.w("SetupViewModel", "Could not determine entry point, using binary name", "name=$binaryName")
+        // Last resort: just use the binary name
+        emitLog("SetupViewModel", "Could not determine entry point, using binary name", "name=$binaryName")
         return binaryName
     }
 
