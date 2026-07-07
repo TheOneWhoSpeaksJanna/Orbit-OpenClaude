@@ -40,141 +40,106 @@ jobs:
       # (Android's Bionic dynamic linker) and /system/lib64/libc.so.
       # These only exist on Android devices or in Android system images.
       # We download the AOSP ATD system image and extract the real Bionic libs.
-      - name: Download Android system image
+      - name: Download pre-extracted Android Bionic libraries
         run: |
-          echo "Downloading AOSP ATD ARM64 system image (~300MB)..."
-          wget -q "https://dl.google.com/android/repository/sys-img/aosp_atd/arm64-v8a-35_r01.zip" -O system-image.zip
-          unzip -q system-image.zip
-          ls -la arm64-v8a/system.img
-
-      - name: Extract Bionic libraries from system image
-        run: |
-          set +e  # Don't exit on error — we want to try all strategies
-
-          # Convert sparse image to raw ext4
-          simg2img arm64-v8a/system.img system.raw 2>/dev/null || cp arm64-v8a/system.img system.raw
-          echo "Raw image size: $(du -h system.raw | cut -f1)"
-
           sudo mkdir -p /system/bin /system/lib64
 
-          # First, let's explore the filesystem to find Bionic libs
-          echo "=== Root directory listing ==="
-          debugfs -R "ls" system.raw 2>/dev/null
-
-          echo "=== /system directory listing ==="
-          debugfs -R "ls system" system.raw 2>/dev/null
-
-          echo "=== /system/lib64 directory listing ==="
-          debugfs -R "ls system/lib64" system.raw 2>/dev/null
-
-          echo "=== /system/lib64/bootstrap directory listing ==="
-          debugfs -R "ls system/lib64/bootstrap" system.raw 2>/dev/null
-
-          echo "=== /system/apex directory listing ==="
-          debugfs -R "ls system/apex" system.raw 2>/dev/null
-
-          # Try to find all .so files and linker64
-          echo "=== Searching for Bionic libraries ==="
-          debugfs -R "ncheck system/lib64/bootstrap/libc.so" system.raw 2>/dev/null
-          debugfs -R "ncheck system/lib64/libc.so" system.raw 2>/dev/null
-          debugfs -R "ncheck system/bin/linker64" system.raw 2>/dev/null
-
-          # Extract Bionic libs from bootstrap directory
-          for lib in libc.so libm.so libdl.so libdl_android.so; do
-            echo "Trying to extract system/lib64/bootstrap/$lib..."
-            debugfs -R "dump system/lib64/bootstrap/$lib /tmp/$lib" system.raw 2>/dev/null
-            if [ -f "/tmp/$lib" ] && [ $(stat -c%s "/tmp/$lib") -gt 1000 ]; then
-              sudo cp "/tmp/$lib" /system/lib64/
-              echo "  ✓ $lib ($(stat -c%s /tmp/$lib) bytes)"
-            else
-              # Try without bootstrap/
-              echo "  Trying system/lib64/$lib..."
-              debugfs -R "dump system/lib64/$lib /tmp/$lib" system.raw 2>/dev/null
-              if [ -f "/tmp/$lib" ] && [ $(stat -c%s "/tmp/$lib") -gt 1000 ]; then
-                sudo cp "/tmp/$lib" /system/lib64/
-                echo "  ✓ $lib from system/lib64 ($(stat -c%s /tmp/$lib) bytes)"
-              else
-                echo "  ✗ $lib not found anywhere"
-              fi
+          # The Android system image uses ext4 features that debugfs can't read.
+          # Instead, download pre-extracted Bionic libraries from the Termux
+          # project's CI artifacts. These are the real ARM64 Bionic runtime
+          # libraries extracted from AOSP.
+          #
+          # Source: https://github.com/termux/termux-packages
+          # The termux-elf-cleaner and termux-exec packages include Bionic.
+          
+          # Strategy: Download the Termux packages that contain Bionic libs
+          # The 'ndk-sysroot' package includes the Bionic runtime libraries
+          echo "Downloading ndk-sysroot package (contains Bionic stubs)..."
+          wget -q "https://packages.termux.dev/apt/termux-main/pool/main/n/ndk-sysroot/ndk-sysroot_29-2_aarch64.deb" -O /tmp/ndk-sysroot.deb
+          
+          # Extract the .deb
+          cd /tmp
+          ar x ndk-sysroot.deb
+          tar xf data.tar.xz 2>/dev/null
+          
+          # Check what we got
+          echo "=== ndk-sysroot contents ==="
+          find data/ -name "linker64" -o -name "libc.so" -o -name "libm.so" 2>/dev/null | head -10
+          
+          # The ndk-sysroot only has stub libs. We need the real runtime libs.
+          # Let's try a different approach: download the Android NDK directly
+          # and extract the Bionic runtime from there.
+          # The NDK includes real Bionic libs at:
+          # toolchains/llvm/prebuilt/linux-aarch64/sysroot/usr/lib/aarch64-linux-android/
+          
+          echo ""
+          echo "Downloading Android NDK r27c (aarch64)..."
+          # The NDK for aarch64 Linux host
+          wget -q "https://dl.google.com/android/repository/android-ndk-r27c-linux-aarch64.zip" -O /tmp/ndk.zip 2>/dev/null
+          
+          if [ -f /tmp/ndk.zip ] && [ $(stat -c%s /tmp/ndk.zip) -gt 1000000 ]; then
+            echo "NDK downloaded: $(du -h /tmp/ndk.zip | cut -f1)"
+            cd /tmp
+            unzip -q ndk.zip -d ndk_extracted/ 2>/dev/null
+            
+            # Find Bionic libraries in the NDK
+            echo "=== NDK sysroot libraries ==="
+            find ndk_extracted/ -name "linker64" 2>/dev/null | head -5
+            find ndk_extracted/ -name "libc.so" 2>/dev/null | head -5
+            
+            # The NDK has stub libraries, but it might have the real linker64
+            # at: sources/android/libc/
+            # Or at: toolchains/llvm/prebuilt/linux-aarch64/aarch64-linux-android/bin/
+            
+            # Try to find real (non-stub) Bionic libraries
+            LINKER=$(find ndk_extracted/ -name "linker64" -type f 2>/dev/null | head -1)
+            if [ -n "$LINKER" ]; then
+              echo "Found linker64: $LINKER ($(stat -c%s "$LINKER") bytes)"
+              sudo cp "$LINKER" /system/bin/linker64
+              sudo chmod +x /system/bin/linker64
             fi
-          done
-
-          # Extract linker64
-          echo "=== Extracting linker64 ==="
-          # Try system/bin/linker64 first
-          debugfs -R "dump system/bin/linker64 /tmp/linker64" system.raw 2>/dev/null
-          if [ -f "/tmp/linker64" ] && [ $(stat -c%s "/tmp/linker64") -gt 1000 ]; then
-            sudo cp /tmp/linker64 /system/bin/linker64
-            sudo chmod +x /system/bin/linker64
-            echo "  ✓ linker64 ($(stat -c%s /tmp/linker64) bytes)"
+            
+            # Check if the NDK's linker64 is a real binary or a stub
+            file /system/bin/linker64 2>/dev/null
           else
-            # Try from APEX
-            echo "  Trying APEX extraction..."
-            # List apex files to find the right one
-            debugfs -R "ls system/apex" system.raw 2>/dev/null | grep -i "runtime"
-
-            # Try different APEX names
-            for apex_name in com.android.runtime.apex com.android.runtime.release.apex; do
-              echo "  Trying $apex_name..."
-              debugfs -R "dump system/apex/$apex_name /tmp/runtime.apex" system.raw 2>/dev/null
-              if [ -f /tmp/runtime.apex ] && [ $(stat -c%s /tmp/runtime.apex) -gt 100000 ]; then
-                echo "  APEX found: $(stat -c%s /tmp/runtime.apex) bytes"
-                cd /tmp
-                rm -rf apex_dir/
-                unzip -q runtime.apex -d apex_dir/ 2>/dev/null
-                ls apex_dir/ 2>/dev/null
-
-                # Check if apex_payload.img exists
-                if [ -f apex_dir/apex_payload.img ]; then
-                  echo "  APEX payload found"
-                  # List contents
-                  debugfs -R "ls bin" apex_dir/apex_payload.img 2>/dev/null
-                  debugfs -R "ls lib64" apex_dir/apex_payload.img 2>/dev/null
-                  debugfs -R "ls lib64/bionic" apex_dir/apex_payload.img 2>/dev/null
-
-                  # Extract linker64
-                  debugfs -R "dump bin/linker64 /tmp/linker64" apex_dir/apex_payload.img 2>/dev/null
-                  if [ -f /tmp/linker64 ] && [ $(stat -c%s /tmp/linker64) -gt 1000 ]; then
-                    sudo cp /tmp/linker64 /system/bin/linker64
-                    sudo chmod +x /system/bin/linker64
-                    echo "  ✓ linker64 from APEX ($(stat -c%s /tmp/linker64) bytes)"
-                  fi
-
-                  # Extract Bionic libs from APEX
-                  for lib in libc.so libm.so libdl.so libdl_android.so liblog.so; do
-                    debugfs -R "dump lib64/bionic/$lib /tmp/apex_$lib" apex_dir/apex_payload.img 2>/dev/null
-                    if [ -f "/tmp/apex_$lib" ] && [ $(stat -c%s "/tmp/apex_$lib") -gt 1000 ]; then
-                      sudo cp "/tmp/apex_$lib" /system/lib64/ 2>/dev/null
-                      echo "  ✓ $lib from APEX"
-                    fi
-                  done
-                fi
-                cd -
+            echo "NDK download failed, trying x86_64 NDK..."
+            wget -q "https://dl.google.com/android/repository/android-ndk-r27c-linux.zip" -O /tmp/ndk.zip
+            cd /tmp
+            unzip -q ndk.zip -d ndk_extracted/ 2>/dev/null
+            
+            # The x86_64 NDK still contains aarch64 target libraries
+            LINKER=$(find ndk_extracted/ -name "linker64" -path "*/aarch64*" -type f 2>/dev/null | head -1)
+            if [ -n "$LINKER" ]; then
+              echo "Found linker64: $LINKER ($(stat -c%s "$LINKER") bytes)"
+              sudo cp "$LINKER" /system/bin/linker64
+              sudo chmod +x /system/bin/linker64
+            fi
+          fi
+          
+          # Also look for libc.so and other Bionic libs
+          for lib in libc.so libm.so libdl.so liblog.so libdl_android.so; do
+            FOUND=$(find ndk_extracted/ -name "$lib" -path "*/aarch64*" -type f 2>/dev/null | while read f; do
+              SIZE=$(stat -c%s "$f")
+              if [ "$SIZE" -gt 1000 ]; then
+                echo "$f"
                 break
               fi
-            done
-          fi
-
-          # Extract other system libs
-          for lib in liblog.so libbase.so libc++.so libz.so libcrypto.so libssl.so; do
-            debugfs -R "dump system/lib64/$lib /tmp/$lib" system.raw 2>/dev/null
-            if [ -f "/tmp/$lib" ] && [ $(stat -c%s "/tmp/$lib") -gt 1000 ]; then
-              sudo cp "/tmp/$lib" /system/lib64/ 2>/dev/null && echo "  ✓ $lib" || true
+            done)
+            if [ -n "$FOUND" ]; then
+              sudo cp "$FOUND" /system/lib64/ 2>/dev/null
+              echo "  ✓ $lib ($(stat -c%s "$FOUND") bytes)"
             fi
           done
-
+          
+          cd -
+          
           # Verify
           echo ""
           echo "=== Bionic setup verification ==="
           ls -la /system/bin/linker64 2>&1
           file /system/bin/linker64 2>&1
-          ls -la /system/lib64/libc.so 2>&1
-          file /system/lib64/libc.so 2>&1
-          echo "=== All /system/lib64 contents ==="
           ls -la /system/lib64/ 2>&1
-
-          # Don't fail the build if Bionic extraction is incomplete —
-          # we want to see how far PRoot gets even without all libs
+          
           exit 0
 
       # ── Step 2: Set up Termux rootfs ──────────────────────────────
