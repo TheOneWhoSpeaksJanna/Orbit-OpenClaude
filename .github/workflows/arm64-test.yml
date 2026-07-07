@@ -42,6 +42,7 @@ jobs:
       # We download the AOSP ATD system image and extract the real Bionic libs.
       - name: Download pre-extracted Android Bionic libraries
         run: |
+          set +e  # Don't exit on individual command failures
           sudo mkdir -p /system/bin /system/lib64
 
           # The Android system image uses ext4 features that debugfs can't read.
