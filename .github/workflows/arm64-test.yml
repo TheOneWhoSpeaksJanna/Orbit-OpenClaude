@@ -92,23 +92,71 @@ jobs:
             # Install ext4 Python module
             pip3 install ext4 2>/dev/null
 
-            # Run extraction script (from repo, avoids YAML heredoc issues)
-            python3 $GITHUB_WORKSPACE/scripts/extract_bionic.py /tmp/system.raw /tmp/bionic_out
+            # Try multiple extraction strategies:
 
-            # Copy results to /system
-            if [ -f /tmp/bionic_out/linker64 ]; then
-              sudo cp /tmp/bionic_out/linker64 /system/bin/linker64
-              sudo chmod +x /system/bin/linker64
-              echo "  linker64 from APEX ($(stat -c%s /tmp/bionic_out/linker64) bytes)"
-              file /system/bin/linker64
-            fi
+            # Strategy A: Mount the raw image (we have sudo on the runner)
+            echo "=== Strategy A: Mount raw image ==="
+            sudo mkdir -p /mnt/system
+            sudo mount -o loop,ro system.raw /mnt/system 2>&1 && {
+              echo "Mount succeeded!"
+              ls /mnt/system/ | head -10
 
-            for lib in /tmp/bionic_out/*.so; do
-              if [ -f "$lib" ] && [ $(stat -c%s "$lib") -gt 1000 ]; then
-                sudo cp "$lib" /system/lib64/ 2>/dev/null
-                echo "  $(basename $lib) ($(stat -c%s "$lib") bytes)"
+              # Extract Bionic bootstrap libs
+              BOOTSTRAP="/mnt/system/system/lib64/bootstrap"
+              if [ -d "$BOOTSTRAP" ]; then
+                echo "Found bootstrap directory"
+                for lib in libc.so libm.so libdl.so libdl_android.so; do
+                  if [ -f "$BOOTSTRAP/$lib" ]; then
+                    sudo cp "$BOOTSTRAP/$lib" /system/lib64/
+                    echo "  bootstrap: $lib ($(stat -c%s "$BOOTSTRAP/$lib") bytes)"
+                  fi
+                done
               fi
-            done
+
+              # Extract linker64 from APEX
+              APEX="/mnt/system/system/apex/com.android.runtime.apex"
+              if [ -f "$APEX" ]; then
+                echo "Found APEX: $APEX"
+                sudo cp "$APEX" /tmp/runtime.apex
+                cd /tmp
+                rm -rf apex_dir/
+                unzip -q runtime.apex -d apex_dir/ 2>/dev/null
+                if [ -f apex_dir/apex_payload.img ]; then
+                  echo "Mounting APEX payload..."
+                  sudo mkdir -p /mnt/apex
+                  sudo mount -o loop,ro apex_dir/apex_payload.img /mnt/apex 2>&1
+                  if [ -f /mnt/apex/bin/linker64 ]; then
+                    sudo cp /mnt/apex/bin/linker64 /system/bin/linker64
+                    sudo chmod +x /system/bin/linker64
+                    echo "  APEX: linker64 ($(stat -c%s /mnt/apex/bin/linker64) bytes)"
+                  fi
+                  for lib in /mnt/apex/lib64/bionic/*.so; do
+                    [ -f "$lib" ] && sudo cp "$lib" /system/lib64/ 2>/dev/null
+                  done
+                  sudo umount /mnt/apex 2>/dev/null
+                fi
+                cd -
+              fi
+
+              sudo umount /mnt/system 2>/dev/null
+            } || {
+              echo "Mount failed, trying Python ext4..."
+              # Strategy B: Python ext4 module (fallback)
+              python3 $GITHUB_WORKSPACE/scripts/extract_bionic.py /tmp/system.raw /tmp/bionic_out 2>&1 || true
+
+              if [ -f /tmp/bionic_out/linker64 ]; then
+                sudo cp /tmp/bionic_out/linker64 /system/bin/linker64
+                sudo chmod +x /system/bin/linker64
+                echo "  Python: linker64 ($(stat -c%s /tmp/bionic_out/linker64) bytes)"
+              fi
+
+              for lib in /tmp/bionic_out/*.so; do
+                if [ -f "$lib" ] && [ $(stat -c%s "$lib") -gt 1000 ]; then
+                  sudo cp "$lib" /system/lib64/ 2>/dev/null
+                  echo "  Python: $(basename $lib)"
+                fi
+              done
+            }
           fi
 
           cd $GITHUB_WORKSPACE
