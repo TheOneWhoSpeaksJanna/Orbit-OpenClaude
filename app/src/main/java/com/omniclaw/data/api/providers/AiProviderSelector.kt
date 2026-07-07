@@ -1,5 +1,8 @@
 package com.omniclaw.data.api.providers
 
+import android.content.Context
+import com.omniclaw.core.logging.FileLogger
+import com.omniclaw.data.local.runtime.ProviderCatalog
 import com.omniclaw.domain.api.AiEvent
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
@@ -11,15 +14,27 @@ import okhttp3.OkHttpClient
 /**
  * Routes calls to the active provider implementation.
  *
- * The `providers` map keys MUST match the provider name strings used in
- * [com.omniclaw.ui.viewmodels.ProvidersViewModel.KNOWN_PROVIDERS] and in
- * [com.omniclaw.data.local.prefs.PreferencesManager.getApiKeyForProvider].
- * Mismatches cause silent fallback to Gemini, which historically made
- * DeepSeek/Groq/Ollama unusable even though the UI listed them.
+ * DYNAMIC ROUTING (v195+):
+ * Previously, this class had a hardcoded map of 9 providers and silently
+ * fell back to Gemini for any unknown provider. This caused "API key invalid"
+ * errors when users selected providers like xAI, Mistral, Together, etc.
+ *
+ * Now it loads the provider catalog dynamically and creates the appropriate
+ * provider based on the catalog entry's "transport" field:
+ *  - "openai-compatible" → GenericOpenAIProvider (handles 20+ providers)
+ *  - "anthropic-native"  → ClaudeProvider
+ *  - "gemini-native"     → GeminiProvider
+ *  - "local"             → OllamaProvider
+ *  - "zai-free"          → ZAIProvider
+ *
+ * The catalog is loaded lazily on first use and cached.
  */
-class AiProviderSelector(okHttpClient: OkHttpClient) : AiProvider {
+class AiProviderSelector(
+    private val okHttpClient: OkHttpClient,
+    private val context: Context? = null
+) : AiProvider {
 
-    private val providers: Map<String, AiProvider> = mapOf(
+    private val hardcodedProviders: Map<String, AiProvider> = mapOf(
         "Gemini" to GeminiProvider(okHttpClient),
         "OpenAI" to OpenAIProvider(okHttpClient),
         "Claude" to ClaudeProvider(okHttpClient),
@@ -31,8 +46,62 @@ class AiProviderSelector(okHttpClient: OkHttpClient) : AiProvider {
         "Z.AI" to ZAIProvider(okHttpClient)
     )
 
+    // Cache of dynamically-created providers (keyed by provider display name)
+    private val dynamicProviders = mutableMapOf<String, AiProvider>()
+
+    // Lazy-loaded catalog
+    private val catalog: List<ProviderCatalog.ProviderEntry>? by lazy {
+        try {
+            context?.let { ProviderCatalog.load(it) }
+        } catch (e: Exception) {
+            FileLogger.w("AiProviderSelector", "Failed to load provider catalog", "reason=${e.message}")
+            null
+        }
+    }
+
     private fun getProvider(name: String): AiProvider {
-        return providers[name] ?: providers["Gemini"]!!
+        // 1. Check hardcoded providers first (fast path for the 9 legacy providers)
+        hardcodedProviders[name]?.let { return it }
+
+        // 2. Check dynamic cache
+        dynamicProviders[name]?.let { return it }
+
+        // 3. Look up in catalog and create dynamically
+        if (catalog != null) {
+            for (entry in catalog!!) {
+                if (entry.name == name) {
+                    val provider = createProviderForEntry(entry)
+                    dynamicProviders[name] = provider
+                    return provider
+                }
+            }
+        }
+
+        // 4. Last resort: return Gemini (shouldn't happen with a valid catalog)
+        FileLogger.w("AiProviderSelector", "Unknown provider, falling back to Gemini", "name=$name")
+        return hardcodedProviders["Gemini"]!!
+    }
+
+    private fun createProviderForEntry(entry: ProviderCatalog.ProviderEntry): AiProvider {
+        val baseUrl = entry.baseUrl
+        val transport = entry.transport
+        val defaultModel = entry.defaultModel
+
+        FileLogger.i("AiProviderSelector", "Creating dynamic provider",
+            "name=${entry.name} transport=$transport baseUrl=$baseUrl")
+
+        return when (transport) {
+            "anthropic-native" -> ClaudeProvider(okHttpClient)
+            "gemini-native" -> GeminiProvider(okHttpClient)
+            "local" -> OllamaProvider(okHttpClient)
+            "zai-free" -> ZAIProvider(okHttpClient)
+            else -> GenericOpenAIProvider(
+                httpClient = okHttpClient,
+                baseUrl = baseUrl,
+                providerName = entry.name,
+                defaultModel = defaultModel
+            )
+        }
     }
 
     override fun generateContentStream(sessionId: String?, prompt: String, apiKey: String, provider: String, model: String): Flow<AiEvent> {
@@ -48,11 +117,11 @@ class AiProviderSelector(okHttpClient: OkHttpClient) : AiProvider {
     }
 
     override suspend fun createSession(sessionId: String, systemPrompt: String?) {
-        providers.values.forEach { it.createSession(sessionId, systemPrompt) }
+        hardcodedProviders.values.forEach { it.createSession(sessionId, systemPrompt) }
     }
 
     override suspend fun deleteSession(sessionId: String) {
-        providers.values.forEach { it.deleteSession(sessionId) }
+        hardcodedProviders.values.forEach { it.deleteSession(sessionId) }
     }
 
     override fun getModels(providerName: String): List<String> = getProvider(providerName).getModels(providerName)

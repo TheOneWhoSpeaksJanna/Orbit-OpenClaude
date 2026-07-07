@@ -293,9 +293,23 @@ class ProvidersViewModel(
             }
 
             else -> {
-                // For unknown providers from the dynamic catalog, try a simple
-                // GET to the base URL to check connectivity.
-                throw IllegalArgumentException("Unknown provider: $name")
+                // For dynamic catalog providers, look up the baseUrl and do
+                // a generic OpenAI-compatible /models GET with Bearer auth.
+                // This works for xAI, Venice, Fireworks, Moonshot, Together,
+                // Mistral, NVIDIA, DashScope, Kimi, GitHub Models, etc.
+                val catalog = com.omniclaw.data.local.runtime.ProviderCatalog.load(context)
+                val entry = catalog.find { it.name == name }
+                if (entry != null && entry.baseUrl.isNotBlank()) {
+                    var base = entry.baseUrl.trimEnd('/')
+                    if (!base.endsWith("/v1")) base = "$base/v1"
+                    Request.Builder()
+                        .url("$base/models")
+                        .header("Authorization", "Bearer $apiKey")
+                        .get()
+                        .build()
+                } else {
+                    throw IllegalArgumentException("Unknown provider: $name")
+                }
             }
         }
     }

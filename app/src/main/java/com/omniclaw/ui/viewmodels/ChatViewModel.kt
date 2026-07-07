@@ -275,18 +275,33 @@ class ChatViewModel(
                     return@launch
                 }
 
-                // Run agent via PRoot. runCmd is a command string like
-                // `node /orbit/agents/openclaude/index.js` that gets executed
-                // as /bin/sh -c "<runCmd>" inside the Termux rootfs under PRoot.
-                // PRoot ptrace-intercepts all execve calls made by node and
-                // its children, so binaries in app-private storage run despite
-                // the SELinux W^X block on app_data_file.
+                // Run agent via PRoot. Try multiple methods to pass the prompt:
+                // 1. stdin piping (echo "prompt" | agent) — works for most CLI agents
+                // 2. -p flag (agent -p "prompt") — common flag for prompt input
+                // 3. direct argument (agent "prompt") — some agents accept this
                 try {
                     com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec start (PRoot)", "cmd=$runCmd content=${content.take(80)}")
                     val escaped = content.replace("\"", "\\\"").replace("`", "\\`").replace("$", "\\$")
-                    val fullCmd = "echo \"$escaped\" | $runCmd"
-                    val result = termuxRuntime.executeInTermux(fullCmd, "")
-                    com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec result", "exit=${result.exitCode} output=${result.output.take(150)}")
+
+                    // Method 1: stdin pipe
+                    var fullCmd = "echo \"$escaped\" | $runCmd"
+                    var result = termuxRuntime.executeInTermux(fullCmd, "")
+                    com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (stdin)", "exit=${result.exitCode} output=${result.output.take(150)}")
+
+                    // If stdin method failed or produced no output, try -p flag
+                    if (result.exitCode != 0 || result.output.isBlank()) {
+                        fullCmd = "$runCmd -p \"$escaped\""
+                        result = termuxRuntime.executeInTermux(fullCmd, "")
+                        com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (-p flag)", "exit=${result.exitCode} output=${result.output.take(150)}")
+                    }
+
+                    // If -p flag also failed, try direct argument
+                    if (result.exitCode != 0 || result.output.isBlank()) {
+                        fullCmd = "$runCmd \"$escaped\""
+                        result = termuxRuntime.executeInTermux(fullCmd, "")
+                        com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (direct arg)", "exit=${result.exitCode} output=${result.output.take(150)}")
+                    }
+
                     val modelMsg = Message(
                         id = UUID.randomUUID().toString(),
                         sessionId = session.id,

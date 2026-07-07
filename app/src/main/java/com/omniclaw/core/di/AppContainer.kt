@@ -54,7 +54,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val aiProvider: AiProvider by lazy {
-        com.omniclaw.data.api.providers.AiProviderSelector(okHttpClient)
+        com.omniclaw.data.api.providers.AiProviderSelector(okHttpClient, context)
     }
 
     override val runtimeManager: com.omniclaw.data.local.runtime.OmniClawRuntimeManager by lazy {
