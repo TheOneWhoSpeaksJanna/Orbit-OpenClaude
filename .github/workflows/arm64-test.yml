@@ -93,9 +93,203 @@ jobs:
             sudo chmod +x /system/bin/linker64
             file /system/bin/linker64
           else
-            echo "linker64 not found in NDK, trying sysroot lib64..."
-            # Some NDK versions put it at sysroot/usr/lib/aarch64-linux-android/linker64
-            find ndk_extracted/ -path "*/aarch64-linux-android*" -name "linker*" 2>/dev/null
+            echo "linker64 not found in NDK."
+            echo "Trying to extract from Android system image using Python ext4 module..."
+
+            # Download the system image and extract linker64 using Python
+            # (debugfs can't read the ext4, but Python's ext4 module can)
+            cd $GITHUB_WORKSPACE
+            wget -q "https://dl.google.com/android/repository/sys-img/aosp_atd/arm64-v8a-35_r01.zip" -O /tmp/system-image.zip
+            cd /tmp
+            unzip -q system-image.zip "arm64-v8a/system.img" -d .
+            simg2img arm64-v8a/system.img system.raw 2>/dev/null || cp arm64-v8a/system.img system.raw
+
+            # Install ext4 Python module
+            pip3 install ext4 2>/dev/null
+
+            # Extract linker64 from the APEX inside the system image
+            python3 << 'PYEOF'
+import os, struct
+
+# Find the ext4 filesystem offset in the system image
+# (the system image has a header before the actual ext4 data)
+FS_OFFSET = None
+with open('/tmp/system.raw', 'rb') as f:
+    # Search for ext4 magic (0x53EF) in the first 100MB
+    offset = 0
+    while offset < 100 * 1024 * 1024:
+        f.seek(offset)
+        data = f.read(1024)
+        if len(data) < 58:
+            break
+        # ext4 superblock magic is at offset 56 within the superblock
+        # The superblock starts at offset 1024 within the partition
+        for i in range(0, len(data) - 58, 4):
+            if data[i+56:i+58] == b'\x53\xef':
+                sb_start = offset + i - 56
+                if sb_start >= 0:
+                    FS_OFFSET = sb_start - 1024
+                    print(f"Found ext4 superblock at offset {sb_start}, FS starts at {FS_OFFSET}")
+                    break
+        if FS_OFFSET is not None:
+            break
+        offset += 1024
+
+if FS_OFFSET is None:
+    print("ERROR: Could not find ext4 filesystem in system image")
+    exit(1)
+
+# Extract the ext4 filesystem to a separate file
+fs_size = 214153 * 4096  # from earlier analysis
+print(f"Extracting ext4 filesystem ({fs_size} bytes) from offset {FS_OFFSET}...")
+with open('/tmp/system.raw', 'rb') as src:
+    src.seek(FS_OFFSET)
+    with open('/tmp/system.ext4', 'wb') as dst:
+        remaining = fs_size
+        while remaining > 0:
+            chunk = src.read(min(1024*1024, remaining))
+            if not chunk:
+                break
+            dst.write(chunk)
+            remaining -= len(chunk)
+
+# Now use the ext4 module to read it
+from ext4 import Volume
+
+with open('/tmp/system.ext4', 'rb') as f:
+    vol = Volume(f)
+    root = vol.root
+
+    def get_dir(parent, name):
+        for entry, filetype in parent.opendir():
+            n = entry.name
+            if isinstance(n, bytes):
+                n = n.decode('utf-8', errors='replace')
+            if n == name:
+                return vol.inodes[entry.inode]
+        return None
+
+    def extract_file(inode, output_path):
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        bio = inode.open()
+        data = bio.read(inode.size)
+        with open(output_path, 'wb') as out:
+            out.write(data)
+        print(f"  Extracted: {output_path} ({len(data)} bytes)")
+        return len(data)
+
+    # Navigate to /system/lib64/bootstrap/
+    system_inode = get_dir(root, 'system')
+    lib64_inode = get_dir(system_inode, 'lib64')
+    bootstrap_inode = get_dir(lib64_inode, 'bootstrap')
+
+    if bootstrap_inode:
+        print("Found /system/lib64/bootstrap/")
+        for entry, filetype in bootstrap_inode.opendir():
+            name = entry.name
+            if isinstance(name, bytes):
+                name = name.decode('utf-8', errors='replace')
+            if name in ('.', '..'):
+                continue
+            inode = vol.inodes[entry.inode]
+            if inode.size > 1000:  # Skip stubs
+                extract_file(inode, f'/tmp/bionic/{name}')
+
+    # Also try to get linker64 from APEX
+    apex_inode = get_dir(system_inode, 'apex')
+    if apex_inode:
+        for entry, filetype in apex_inode.opendir():
+            name = entry.name
+            if isinstance(name, bytes):
+                name = name.decode('utf-8', errors='replace')
+            if 'runtime' in name:
+                print(f"Found APEX: {name}")
+                inode = vol.inodes[entry.inode]
+                extract_file(inode, f'/tmp/runtime.apex')
+                break
+PYEOF
+
+            # If we got the APEX, extract linker64 from it
+            if [ -f /tmp/runtime.apex ]; then
+              echo "Extracting linker64 from APEX..."
+              cd /tmp
+              rm -rf apex_dir/
+              unzip -q runtime.apex -d apex_dir/ 2>/dev/null
+
+              if [ -f apex_dir/apex_payload.img ]; then
+                # Use Python ext4 to read the APEX payload
+                python3 << 'PYEOF2'
+from ext4 import Volume
+import os
+
+with open('/tmp/apex_dir/apex_payload.img', 'rb') as f:
+    vol = Volume(f)
+    root = vol.root
+
+    def get_dir(parent, name):
+        for entry, filetype in parent.opendir():
+            n = entry.name
+            if isinstance(n, bytes):
+                n = n.decode('utf-8', errors='replace')
+            if n == name:
+                return vol.inodes[entry.inode]
+        return None
+
+    # Extract linker64 from /bin/
+    bin_inode = get_dir(root, 'bin')
+    if bin_inode:
+        for entry, filetype in bin_inode.opendir():
+            name = entry.name
+            if isinstance(name, bytes):
+                name = name.decode('utf-8', errors='replace')
+            if 'linker64' in name:
+                inode = vol.inodes[entry.inode]
+                bio = inode.open()
+                data = bio.read(inode.size)
+                with open('/tmp/linker64', 'wb') as out:
+                    out.write(data)
+                print(f"Extracted linker64: {len(data)} bytes")
+                break
+
+    # Also extract Bionic libs from /lib64/bionic/
+    lib64_inode = get_dir(root, 'lib64')
+    if lib64_inode:
+        bionic_inode = get_dir(lib64_inode, 'bionic')
+        if bionic_inode:
+            for entry, filetype in bionic_inode.opendir():
+                name = entry.name
+                if isinstance(name, bytes):
+                    name = name.decode('utf-8', errors='replace')
+                if name in ('.', '..'):
+                    continue
+                inode = vol.inodes[entry.inode]
+                if inode.size > 1000:
+                    bio = inode.open()
+                    data = bio.read(inode.size)
+                    with open(f'/tmp/bionic/{name}', 'wb') as out:
+                        out.write(data)
+                    print(f"Extracted Bionic lib: {name} ({len(data)} bytes)")
+PYEOF2
+              fi
+              cd -
+            fi
+
+            # Copy extracted Bionic libs to /system
+            if [ -f /tmp/linker64 ]; then
+              sudo cp /tmp/linker64 /system/bin/linker64
+              sudo chmod +x /system/bin/linker64
+              echo "✓ linker64 installed ($(stat -c%s /tmp/linker64) bytes)"
+              file /system/bin/linker64
+            fi
+
+            if [ -d /tmp/bionic ]; then
+              for lib in /tmp/bionic/*.so; do
+                if [ -f "$lib" ] && [ $(stat -c%s "$lib") -gt 1000 ]; then
+                  sudo cp "$lib" /system/lib64/ 2>/dev/null
+                  echo "✓ $(basename $lib) ($(stat -c%s "$lib") bytes)"
+                fi
+              done
+            fi
           fi
           
           # Also look for libc.so and other Bionic libs
