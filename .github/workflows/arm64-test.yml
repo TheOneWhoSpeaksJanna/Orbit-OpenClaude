@@ -91,21 +91,7 @@ jobs:
 
             # The system image is a "super partition" with metadata before the ext4.
             # Find the ext4 filesystem offset by searching for the superblock magic.
-            EXT4_OFFSET=$(python3 -c "
-import struct
-with open('system.raw', 'rb') as f:
-    data = f.read(10 * 1024 * 1024)  # Search first 10MB
-    for i in range(0, len(data) - 1024, 4):
-        # ext4 superblock is at offset 1024 from partition start
-        # Magic (0xEF53) is at byte 56 within the superblock
-        sb = data[i:i+1024]
-        if len(sb) >= 58 and sb[56:58] == b'\x53\xef':
-            # Verify it looks like a real superblock (block size > 0)
-            block_size = 1024 << struct.unpack_from('<I', sb, 24)[0]
-            if block_size > 0 and block_size <= 65536:
-                print(i - 1024)  # Partition starts 1024 before superblock
-                break
-" 2>/dev/null)
+            EXT4_OFFSET=$(python3 $GITHUB_WORKSPACE/scripts/find_ext4_offset.py system.raw)
             echo "ext4 offset: $EXT4_OFFSET"
 
             # Install ext4 Python module
