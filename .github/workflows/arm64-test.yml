@@ -404,12 +404,15 @@ jobs:
             '
 
           echo ""
-          echo "=== STEP 2: FIX - create /usr/bin/env symlink ==="
-          # The shebang #!/usr/bin/env node can't resolve because /usr/bin/env
-          # doesn't exist in the Termux rootfs. Create a symlink.
+          echo "=== STEP 2: /usr/bin/env symlink (harmless, kept for diagnostics) ==="
+          # Originally hypothesized that #!/usr/bin/env node shebangs fail because
+          # /usr/bin/env doesn't exist in Termux. CI diagnostics proved this WRONG —
+          # the real issue was that node/npm were never installed (debs not downloaded).
+          # The symlink is harmless (npm works via PATH without it) but kept for
+          # future diagnostics in case on-device behavior differs.
           mkdir -p rootfs/usr/bin
           ln -sf /data/data/com.termux/files/usr/bin/env rootfs/usr/bin/env 2>/dev/null || true
-          echo "Created /usr/bin/env -> $PREFIX/bin/env"
+          echo "Created /usr/bin/env -> $PREFIX/bin/env (diagnostic, not required)"
 
           echo ""
           echo "=== STEP 3: Re-test after fix ==="
