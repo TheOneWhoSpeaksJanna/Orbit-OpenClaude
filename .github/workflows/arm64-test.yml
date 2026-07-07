@@ -39,6 +39,10 @@ jobs:
       - name: Set up Bionic libraries
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           sudo mkdir -p /system/bin /system/lib64
 
           # Strategy 1: Download NDK for Bionic runtime libs (libc.so, libm.so, etc.)
@@ -224,6 +228,10 @@ jobs:
       - name: Test 1 - Basic PRoot execution
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           chmod +x app/src/main/jniLibs/arm64-v8a/libproot.so
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
@@ -235,12 +243,16 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c "echo 'Hello from PRoot on ARM64!'"
+            /data/data/com.termux/files/usr/bin/sh -c "echo 'Hello from PRoot on ARM64!'"
           echo "EXIT=$?"
 
       - name: Test 2 - dpkg --configure -a
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
 
@@ -250,12 +262,16 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c "dpkg --configure -a 2>&1 || true"
+            /data/data/com.termux/files/usr/bin/sh -c "dpkg --configure -a 2>&1 || true"
           echo "EXIT=$?"
 
       - name: Test 3 - apt update
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
 
@@ -265,13 +281,17 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "apt update -o APT::Sandbox::User=root 2>&1"
           echo "EXIT=$?"
 
       - name: Test 4 - apt install nodejs git python3
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
 
@@ -281,7 +301,7 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "apt install -y -o APT::Sandbox::User=root nodejs git python3 2>&1"
           echo "EXIT=$?"
 
@@ -292,12 +312,16 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "node --version && npm --version && git --version"
 
       - name: Test 5 - npm install -g @gitlawb/openclaude
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
 
@@ -307,13 +331,17 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "npm install -g @gitlawb/openclaude 2>&1"
           echo "EXIT=$?"
 
       - name: Test 6 - Agent entry point resolution
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
 
@@ -324,7 +352,7 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "which openclaude 2>/dev/null || echo 'NOT IN PATH'"
 
           echo "=== Try executing openclaude directly ==="
@@ -334,7 +362,7 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "openclaude --version 2>&1 || echo 'EXEC FAILED'"
 
           echo "=== Resolve symlink ==="
@@ -344,7 +372,7 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "readlink -f \$PREFIX/bin/openclaude 2>/dev/null || echo 'SYMLINK FAILED'"
 
           echo "=== Try node with resolved path ==="
@@ -354,12 +382,16 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             "RESOLVED=\$(readlink -f \$PREFIX/bin/openclaude) && node \"\$RESOLVED\" --version 2>&1 || echo 'NODE EXEC FAILED'"
 
       - name: Test 7 - Agent prompt execution
         run: |
           set +e
+          export PREFIX=/data/data/com.termux/files/usr
+          export PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin
+          export HOME=/data/data/com.termux/files/home
+          export TMPDIR=/tmp
           PROOT="$PWD/app/src/main/jniLibs/arm64-v8a/libproot.so"
           export PROOT_LOADER="$PWD/app/src/main/jniLibs/arm64-v8a/libproot_loader.so"
 
@@ -370,7 +402,7 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             'echo "hi" | openclaude 2>&1; echo "EXIT=$?"'
 
           echo ""
@@ -381,7 +413,7 @@ jobs:
             -b /system -b /system/bin -b /system/lib64 \
             -b /tmp \
             -w /data/data/com.termux/files/home \
-            PREFIX=/data/data/com.termux/files/usr PATH=/data/data/com.termux/files/usr/bin:/system/bin:/usr/bin /data/data/com.termux/files/usr/bin/sh -c \
+            /data/data/com.termux/files/usr/bin/sh -c \
             'RESOLVED=$(readlink -f $PREFIX/bin/openclaude) && echo "hi" | node "$RESOLVED" 2>&1; echo "EXIT=$?"'
 
       - name: Summary
