@@ -89,74 +89,105 @@ jobs:
             python3 $GITHUB_WORKSPACE/scripts/simg2raw.py arm64-v8a/system.img system.raw
             echo "Raw image size: $(du -h system.raw | cut -f1)"
 
+            # The system image is a "super partition" with metadata before the ext4.
+            # Find the ext4 filesystem offset by searching for the superblock magic.
+            EXT4_OFFSET=$(python3 -c "
+import struct
+with open('system.raw', 'rb') as f:
+    data = f.read(10 * 1024 * 1024)  # Search first 10MB
+    for i in range(0, len(data) - 1024, 4):
+        # ext4 superblock is at offset 1024 from partition start
+        # Magic (0xEF53) is at byte 56 within the superblock
+        sb = data[i:i+1024]
+        if len(sb) >= 58 and sb[56:58] == b'\x53\xef':
+            # Verify it looks like a real superblock (block size > 0)
+            block_size = 1024 << struct.unpack_from('<I', sb, 24)[0]
+            if block_size > 0 and block_size <= 65536:
+                print(i - 1024)  # Partition starts 1024 before superblock
+                break
+" 2>/dev/null)
+            echo "ext4 offset: $EXT4_OFFSET"
+
             # Install ext4 Python module
             pip3 install ext4 2>/dev/null
 
             # Try multiple extraction strategies:
 
-            # Strategy A: Mount the raw image (we have sudo on the runner)
-            echo "=== Strategy A: Mount raw image ==="
-            sudo mkdir -p /mnt/system
-            sudo mount -o loop,ro system.raw /mnt/system 2>&1 && {
-              echo "Mount succeeded!"
-              ls /mnt/system/ | head -10
-
-              # Extract Bionic bootstrap libs
-              BOOTSTRAP="/mnt/system/system/lib64/bootstrap"
-              if [ -d "$BOOTSTRAP" ]; then
-                echo "Found bootstrap directory"
-                for lib in libc.so libm.so libdl.so libdl_android.so; do
-                  if [ -f "$BOOTSTRAP/$lib" ]; then
-                    sudo cp "$BOOTSTRAP/$lib" /system/lib64/
-                    echo "  bootstrap: $lib ($(stat -c%s "$BOOTSTRAP/$lib") bytes)"
-                  fi
-                done
-              fi
-
-              # Extract linker64 from APEX
-              APEX="/mnt/system/system/apex/com.android.runtime.apex"
-              if [ -f "$APEX" ]; then
-                echo "Found APEX: $APEX"
-                sudo cp "$APEX" /tmp/runtime.apex
-                cd /tmp
-                rm -rf apex_dir/
-                unzip -q runtime.apex -d apex_dir/ 2>/dev/null
-                if [ -f apex_dir/apex_payload.img ]; then
-                  echo "Mounting APEX payload..."
-                  sudo mkdir -p /mnt/apex
-                  sudo mount -o loop,ro apex_dir/apex_payload.img /mnt/apex 2>&1
-                  if [ -f /mnt/apex/bin/linker64 ]; then
-                    sudo cp /mnt/apex/bin/linker64 /system/bin/linker64
-                    sudo chmod +x /system/bin/linker64
-                    echo "  APEX: linker64 ($(stat -c%s /mnt/apex/bin/linker64) bytes)"
-                  fi
-                  for lib in /mnt/apex/lib64/bionic/*.so; do
-                    [ -f "$lib" ] && sudo cp "$lib" /system/lib64/ 2>/dev/null
-                  done
-                  sudo umount /mnt/apex 2>/dev/null
+            # Strategy A: Mount at ext4 offset using loop
+            echo "=== Strategy A: Mount at ext4 offset ==="
+            if [ -n "$EXT4_OFFSET" ]; then
+              sudo mkdir -p /mnt/system
+              sudo mount -o loop,ro,offset=$EXT4_OFFSET system.raw /mnt/system 2>&1 && {
+                echo "Mount at offset $EXT4_OFFSET succeeded!"
+                ls /mnt/system/ | head -10
+              } || {
+                echo "Mount at offset failed, trying losetup..."
+                # Create a loop device at the offset
+                LOOPDEV=$(sudo losetup -f --show -o $EXT4_OFFSET system.raw 2>/dev/null)
+                if [ -n "$LOOPDEV" ]; then
+                  echo "Loop device: $LOOPDEV"
+                  sudo mount -o ro "$LOOPDEV" /mnt/system 2>&1 && echo "losetup mount succeeded!" || echo "losetup mount failed"
                 fi
-                cd -
-              fi
+              }
 
-              sudo umount /mnt/system 2>/dev/null
-            } || {
-              echo "Mount failed, trying Python ext4..."
-              # Strategy B: Python ext4 module (fallback)
-              python3 $GITHUB_WORKSPACE/scripts/extract_bionic.py /tmp/system.raw /tmp/bionic_out 2>&1 || true
+              if mountpoint -q /mnt/system 2>/dev/null; then
+                # Extract Bionic bootstrap libs
+                BOOTSTRAP="/mnt/system/system/lib64/bootstrap"
+                if [ -d "$BOOTSTRAP" ]; then
+                  echo "Found bootstrap directory"
+                  for lib in libc.so libm.so libdl.so libdl_android.so; do
+                    if [ -f "$BOOTSTRAP/$lib" ]; then
+                      sudo cp "$BOOTSTRAP/$lib" /system/lib64/
+                      echo "  bootstrap: $lib ($(stat -c%s "$BOOTSTRAP/$lib") bytes)"
+                    fi
+                  done
+                fi
+
+                # Extract linker64 from APEX
+                APEX="/mnt/system/system/apex/com.android.runtime.apex"
+                if [ -f "$APEX" ]; then
+                  echo "Found APEX: $APEX"
+                  sudo cp "$APEX" /tmp/runtime.apex
+                  cd /tmp
+                  rm -rf apex_dir/
+                  unzip -q runtime.apex -d apex_dir/ 2>/dev/null
+                  if [ -f apex_dir/apex_payload.img ]; then
+                    echo "Mounting APEX payload..."
+                    sudo mkdir -p /mnt/apex
+                    sudo mount -o loop,ro apex_dir/apex_payload.img /mnt/apex 2>&1
+                    if [ -f /mnt/apex/bin/linker64 ]; then
+                      sudo cp /mnt/apex/bin/linker64 /system/bin/linker64
+                      sudo chmod +x /system/bin/linker64
+                      echo "  APEX: linker64 ($(stat -c%s /mnt/apex/bin/linker64) bytes)"
+                      file /system/bin/linker64
+                    fi
+                    for lib in /mnt/apex/lib64/bionic/*.so; do
+                      [ -f "$lib" ] && sudo cp "$lib" /system/lib64/ 2>/dev/null && echo "  APEX: $(basename $lib)"
+                    done
+                    sudo umount /mnt/apex 2>/dev/null
+                  fi
+                  cd -
+                fi
+                sudo umount /mnt/system 2>/dev/null
+              fi
+            fi
+
+            # Strategy B: Python ext4 module (fallback if mount failed)
+            if [ ! -f /system/bin/linker64 ] && [ -n "$EXT4_OFFSET" ]; then
+              echo "=== Strategy B: Python ext4 at offset ==="
+              # Extract just the ext4 portion to a separate file
+              dd if=system.raw of=system.ext4 bs=1 skip=$EXT4_OFFSET count=877170688 2>/dev/null
+              python3 $GITHUB_WORKSPACE/scripts/extract_bionic.py system.ext4 /tmp/bionic_out 2>&1 || true
 
               if [ -f /tmp/bionic_out/linker64 ]; then
                 sudo cp /tmp/bionic_out/linker64 /system/bin/linker64
                 sudo chmod +x /system/bin/linker64
                 echo "  Python: linker64 ($(stat -c%s /tmp/bionic_out/linker64) bytes)"
               fi
-
               for lib in /tmp/bionic_out/*.so; do
-                if [ -f "$lib" ] && [ $(stat -c%s "$lib") -gt 1000 ]; then
-                  sudo cp "$lib" /system/lib64/ 2>/dev/null
-                  echo "  Python: $(basename $lib)"
-                fi
+                [ -f "$lib" ] && [ $(stat -c%s "$lib") -gt 1000 ] && sudo cp "$lib" /system/lib64/ 2>/dev/null && echo "  Python: $(basename $lib)"
               done
-            }
+            fi
           fi
 
           cd $GITHUB_WORKSPACE
