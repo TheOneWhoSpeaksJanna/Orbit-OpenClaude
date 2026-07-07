@@ -3,6 +3,7 @@ package com.omniclaw.data.api.providers
 import android.content.Context
 import com.omniclaw.core.logging.FileLogger
 import com.omniclaw.data.local.runtime.ProviderCatalog
+import com.omniclaw.data.local.runtime.ProviderEntry
 import com.omniclaw.domain.api.AiEvent
 import com.omniclaw.domain.api.AiProvider
 import com.omniclaw.domain.api.AiResult
@@ -50,7 +51,7 @@ class AiProviderSelector(
     private val dynamicProviders = mutableMapOf<String, AiProvider>()
 
     // Lazy-loaded catalog
-    private val catalog: List<ProviderCatalog.ProviderEntry>? by lazy {
+    private val catalog: List<ProviderEntry>? by lazy {
         try {
             context?.let { ProviderCatalog.load(it) }
         } catch (e: Exception) {
@@ -82,7 +83,7 @@ class AiProviderSelector(
         return hardcodedProviders["Gemini"]!!
     }
 
-    private fun createProviderForEntry(entry: ProviderCatalog.ProviderEntry): AiProvider {
+    private fun createProviderForEntry(entry: ProviderEntry): AiProvider {
         val baseUrl = entry.baseUrl
         val transport = entry.transport
         val defaultModel = entry.defaultModel
