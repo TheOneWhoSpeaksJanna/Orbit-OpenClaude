@@ -62,6 +62,10 @@ jobs:
           find ndk_extracted/ -name "linker64" 2>/dev/null
           find ndk_extracted/ -name "linker*" 2>/dev/null | head -20
 
+          # Also list ALL files in the aarch64 sysroot lib directory
+          echo "=== NDK aarch64 sysroot lib contents ==="
+          find ndk_extracted/ -path "*/aarch64-linux-android*" -name "*.so" -o -path "*/aarch64-linux-android*" -name "linker*" 2>/dev/null | head -30
+
           LINKER=$(find ndk_extracted/ -name "linker64" 2>/dev/null | head -1)
           if [ -n "$LINKER" ]; then
             echo "Found linker64: $LINKER ($(stat -c%s "$LINKER") bytes)"
@@ -79,7 +83,65 @@ jobs:
             wget -q "https://dl.google.com/android/repository/sys-img/aosp_atd/arm64-v8a-35_r01.zip" -O /tmp/system-image.zip
             cd /tmp
             unzip -q system-image.zip "arm64-v8a/system.img" -d .
-            simg2img arm64-v8a/system.img system.raw 2>/dev/null || cp arm64-v8a/system.img system.raw
+
+            # Check if system.img is sparse (starts with 0x3AFF26ED)
+            echo "=== Checking image format ==="
+            python3 -c "
+with open('arm64-v8a/system.img', 'rb') as f:
+    magic = f.read(4)
+    print(f'First 4 bytes: {magic.hex()}')
+    if magic == b'\xed\x26\xff\x3a':
+        print('SPARSE image (simg) — needs conversion')
+    elif magic == b'\x00\x00\x00\x00':
+        print('Raw image (might have header)')
+    else:
+        print('Unknown format')
+"
+
+            # Convert sparse to raw
+            which simg2img 2>/dev/null && echo "simg2img found" || echo "simg2img NOT found"
+            simg2img arm64-v8a/system.img system.raw 2>&1 || {
+              echo "simg2img failed, trying Python sparse converter..."
+              python3 -c "
+import struct, sys
+
+with open('arm64-v8a/system.img', 'rb') as f:
+    magic = struct.unpack('<I', f.read(4))[0]
+    if magic != 0x3AFF26ED:
+        print('Not a sparse image, copying as-is')
+        f.seek(0)
+        with open('system.raw', 'wb') as out:
+            out.write(f.read())
+        sys.exit(0)
+
+    # Parse sparse image header
+    major_version, minor_version, file_hdr_sz, chunk_hdr_sz, blk_sz, total_blks, total_chunks, image_checksum = struct.unpack('<HHHHIIII', f.read(36))
+    print(f'Sparse: version={major_version}.{minor_version} blk_size={blk_sz} total_blks={total_blks} chunks={total_chunks}')
+
+    with open('system.raw', 'wb') as out:
+        for i in range(total_chunks):
+            chunk_type, chunk_sz, chunk_sz_blks = struct.unpack('<HHI', f.read(8))
+            if file_hdr_sz > 28:
+                f.seek(file_hdr_sz - 28, 1)  # skip extra header bytes
+            if chunk_hdr_sz > 12:
+                f.seek(chunk_hdr_sz - 12, 1)  # skip extra chunk header bytes
+
+            data_sz = chunk_sz_blks * blk_sz
+            if chunk_type == 0xCAC1:  # RAW
+                out.write(f.read(data_sz))
+            elif chunk_type == 0xCAC2:  # FILL
+                fill = f.read(4)
+                out.write(fill * (data_sz // 4))
+            elif chunk_type == 0xCAC3:  # DON'T CARE
+                out.write(b'\x00' * data_sz)
+            else:
+                print(f'Unknown chunk type: {chunk_type}')
+                out.write(b'\x00' * data_sz)
+
+    print(f'Converted to raw: {os.path.getsize(\"system.raw\")} bytes')
+" 2>&1 || cp arm64-v8a/system.img system.raw
+            }
+            echo "Raw image size: $(du -h system.raw | cut -f1)"
 
             # Install ext4 Python module
             pip3 install ext4 2>/dev/null
