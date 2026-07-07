@@ -215,7 +215,14 @@ jobs:
           mkdir -p rootfs/data/data/com.termux/files/usr/tmp
           mkdir -p rootfs/data/data/com.termux/cache/apt/archives/partial
           mkdir -p rootfs/etc
-          echo "nameserver 8.8.8.8" > rootfs/etc/resolv.conf
+          # Copy host's resolv.conf for DNS resolution inside PRoot
+          # If that fails, create one with public DNS servers
+          cp /etc/resolv.conf rootfs/etc/resolv.conf 2>/dev/null || {
+            echo "nameserver 8.8.8.8" > rootfs/etc/resolv.conf
+            echo "nameserver 1.1.1.1" >> rootfs/etc/resolv.conf
+          }
+          echo "=== resolv.conf contents ==="
+          cat rootfs/etc/resolv.conf
           mkdir -p rootfs/data/data/com.termux/files/usr/etc/apt
           echo "deb https://packages.termux.dev/apt/termux-main/ stable main" \
             > rootfs/data/data/com.termux/files/usr/etc/apt/sources.list
@@ -244,7 +251,7 @@ jobs:
             -b /tmp \
             -b /etc/resolv.conf \
             -w /data/data/com.termux/files/home \
-            /data/data/com.termux/files/usr/bin/sh -c "echo 'Hello from PRoot on ARM64!'"
+            /data/data/com.termux/files/usr/bin/sh -c "echo 'Hello from PRoot on ARM64!'; echo '=== DNS test ==='; cat /etc/resolv.conf; getent hosts packages.termux.dev 2>&1 || echo 'getent failed'; ping -c1 -W2 packages.termux.dev 2>&1 || echo 'ping failed'"
           echo "EXIT=$?"
 
       - name: Test 2 - dpkg --configure -a
