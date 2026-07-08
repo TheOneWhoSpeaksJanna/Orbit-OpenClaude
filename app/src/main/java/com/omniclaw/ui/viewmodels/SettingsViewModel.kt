@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.omniclaw.OmniClawApplication
+import com.omniclaw.core.logging.CoroutineExceptionHandlerFactory
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.domain.models.Skill
 import com.omniclaw.BuildConfig

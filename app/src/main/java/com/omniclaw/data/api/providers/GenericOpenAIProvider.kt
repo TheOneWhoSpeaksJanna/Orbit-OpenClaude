@@ -21,7 +21,7 @@ import org.json.JSONObject
  *
  * Works with ANY provider that uses the standard OpenAI Chat Completions API
  * format: POST to {
-    private val TAG = "GenericOpenAIProvider"baseUrl}/chat/completions with a JSON body containing
+    internal val TAG = "GenericOpenAIProvider"baseUrl}/chat/completions with a JSON body containing
  * "model" and "messages", and Authorization: Bearer {apiKey}.
  *
  * This handles 20+ providers from the catalog that are marked
@@ -84,7 +84,7 @@ class GenericOpenAIProvider(
                     .build()
 
                 val response = httpClient.newCall(request).execute()
-                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$requestModel")
+                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$model")
                 val responseBody = response.body?.string()
 
                 if (response.isSuccessful && responseBody != null) {

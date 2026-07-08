@@ -58,7 +58,7 @@ class ClaudeProvider(private val httpClient: OkHttpClient) : AiProvider {
                     .build()
 
                 val response = httpClient.newCall(request).execute()
-                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$requestModel")
+                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$model")
                 val responseBody = response.body?.string()
 
                 if (response.isSuccessful && responseBody != null) {
