@@ -63,7 +63,7 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
                     .build()
 
                 val response = httpClient.newCall(request).execute()
-                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$requestModel")
+                FileLogger.d(TAG, "HTTP response", "code=${response.code}")
                 val body = response.body?.string() ?: ""
                 if (!response.isSuccessful) {
                     val errorMsg = try {
@@ -111,7 +111,7 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
                     .post(jsonBody.toString().toRequestBody(jsonMediaType))
                     .build()
                 val response = httpClient.newCall(request).execute()
-                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$requestModel")
+                FileLogger.d(TAG, "HTTP response", "code=${response.code}")
                 response.isSuccessful
             } catch (_: Exception) {
                 false
@@ -134,7 +134,7 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
                     .build()
 
                 val response = httpClient.newCall(request).execute()
-                FileLogger.d(TAG, "HTTP response", "code=${response.code} model=$model")
+                FileLogger.d(TAG, "HTTP response", "code=${response.code}")
                 val body = response.body?.string() ?: ""
 
                 if (!response.isSuccessful) {
