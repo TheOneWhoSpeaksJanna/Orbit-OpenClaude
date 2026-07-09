@@ -560,17 +560,26 @@ class SetupViewModel(
         binaryName: String,
         npmPackage: String?
     ): String {
+        // Helper: extract first non-empty line from command output, stripping
+        // linker warnings that pollute PRoot output.
+        fun cleanOutput(raw: String): String {
+            return raw.lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .filter { !it.startsWith("WARNING: linker:") }
+                .firstOrNull() ?: ""
+        }
+
         // Strategy 1: Try to actually execute the binary. If it works, use it.
-        // (This catches the shebang issue — the file exists but can't be exec'd)
         if (npmPackage != null) {
             val testExec = termuxRuntime.executeInTermux(
                 "$binaryName --version 2>&1 || $binaryName --help 2>&1 || echo EXEC_FAILED",
                 ""
             )
-            val execOutput = testExec.output.trim()
+            val execOutput = cleanOutput(testExec.output)
             emitLog("SetupViewModel", "Binary exec test", "exit=${testExec.exitCode} output=${execOutput.take(200)}")
 
-            if (testExec.exitCode == 0 && !execOutput.contains("not found") && !execOutput.contains("EXEC_FAILED")) {
+            if (testExec.exitCode == 0 && execOutput != "EXEC_FAILED" && !execOutput.contains("not found")) {
                 emitLog("SetupViewModel", "Binary executes correctly", "name=$binaryName")
                 return binaryName
             }
@@ -578,16 +587,18 @@ class SetupViewModel(
         }
 
         // Strategy 2: Resolve the symlink to find the actual JS file.
-        // $PREFIX/bin/openclaude -> ../lib/node_modules/@gitlawb/openclaude/cli.js
+        // $PREFIX/bin/openclaude -> ../lib/node_modules/@gitlawb/openclaude/bin/openclaude
+        // The file may not end in .js — it could be 'openclaude', 'cli.js', etc.
+        // So we accept any path that doesn't contain SYMLINK_FAILED.
         if (npmPackage != null) {
             val resolveSymlink = termuxRuntime.executeInTermux(
                 "readlink -f \$PREFIX/bin/$binaryName 2>/dev/null || echo SYMLINK_FAILED",
                 ""
             )
-            val resolvedPath = resolveSymlink.output.trim()
+            val resolvedPath = cleanOutput(resolveSymlink.output)
             emitLog("SetupViewModel", "Symlink resolve", "path=$resolvedPath")
 
-            if (resolvedPath != "SYMLINK_FAILED" && resolvedPath.isNotEmpty() && resolvedPath.endsWith(".js")) {
+            if (resolvedPath.isNotEmpty() && !resolvedPath.contains("SYMLINK_FAILED")) {
                 emitLog("SetupViewModel", "Using node with resolved path", "path=$resolvedPath")
                 return "node \"$resolvedPath\""
             }
@@ -599,9 +610,9 @@ class SetupViewModel(
                 "node -e \"try{console.log(require.resolve('$npmPackage'))}catch(e){console.log('RESOLVE_FAILED')}\" 2>/dev/null",
                 ""
             )
-            val resolvedPath = resolveResult.output.trim()
+            val resolvedPath = cleanOutput(resolveResult.output)
             emitLog("SetupViewModel", "Node resolve result", "path=$resolvedPath")
-            if (resolvedPath != "RESOLVE_FAILED" && resolvedPath.isNotEmpty() && !resolvedPath.startsWith("Error")) {
+            if (resolvedPath.isNotEmpty() && !resolvedPath.contains("RESOLVE_FAILED") && !resolvedPath.startsWith("Error")) {
                 emitLog("SetupViewModel", "Using node with resolved path", "path=$resolvedPath")
                 return "node \"$resolvedPath\""
             }
@@ -613,7 +624,7 @@ class SetupViewModel(
                 "find \$PREFIX/lib/node_modules/$npmPackage -maxdepth 2 \\( -name 'cli.js' -o -name 'index.js' -o -name 'main.js' \\) 2>/dev/null | head -5",
                 ""
             )
-            val foundFiles = findEntry.output.trim()
+            val foundFiles = cleanOutput(findEntry.output)
             emitLog("SetupViewModel", "Find entry points", "files=$foundFiles")
             if (foundFiles.isNotEmpty()) {
                 val entry = foundFiles.split("\n").firstOrNull { it.contains("cli.js") }
