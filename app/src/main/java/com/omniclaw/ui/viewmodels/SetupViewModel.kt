@@ -677,8 +677,8 @@ class SetupViewModel(
         termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime,
         assetName: String,
         destPath: String
-    ): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
-        try {
+    ): Boolean {
+        return try {
             val inputStream = runtimeManager.context.assets.open(assetName)
             // Write to the rootfs's /tmp directory (bind-mounted from runtimeDir/tmp)
             val destFile = File(termuxRuntime.runtimeDir, "tmp/${assetName}")
