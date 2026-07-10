@@ -63,11 +63,13 @@ class ChatViewModel(
     private val _availableModels = MutableStateFlow<List<String>>(emptyList())
     val availableModels: StateFlow<List<String>> = _availableModels.asStateFlow()
 
-    private val _useLocalMode = MutableStateFlow(false)
+    // Local mode is always on — the app only uses the local OpenClaude agent.
+    // Cloud mode (direct API calls without the agent) is removed.
+    private val _useLocalMode = MutableStateFlow(true)
     val useLocalMode: StateFlow<Boolean> = _useLocalMode.asStateFlow()
 
     fun toggleLocalMode() {
-        _useLocalMode.value = !_useLocalMode.value
+        // No-op — local mode is always on
     }
 
     data class PendingCommand(
@@ -298,19 +300,20 @@ class ChatViewModel(
                     com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec start (PRoot)", "cmd=$runCmd content=${content.take(80)}")
                     val escaped = content.replace("\"", "\\\"").replace("`", "\\`").replace("$", "\\$")
 
-                    // Method 1: stdin pipe (with env vars prepended)
-                    var fullCmd = "$envExports echo \"$escaped\" | $runCmd"
+                    // Method 1: -p flag (OpenClaude's non-interactive mode)
+                    // openclaude -p "prompt" is the correct way to send a one-shot prompt
+                    var fullCmd = "$envExports $runCmd -p \"$escaped\" --dangerously-skip-permissions"
                     var result = termuxRuntime.executeInTermux(fullCmd, "")
-                    com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (stdin)", "exit=${result.exitCode} output=${result.output.take(2000)}")
+                    com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (-p flag)", "exit=${result.exitCode} output=${result.output.take(2000)}")
 
-                    // If stdin method failed or produced no output, try -p flag
+                    // If -p flag failed, try stdin pipe
                     if (result.exitCode != 0 || result.output.isBlank()) {
-                        fullCmd = "$envExports $runCmd -p \"$escaped\""
+                        fullCmd = "$envExports echo \"$escaped\" | $runCmd -p --dangerously-skip-permissions"
                         result = termuxRuntime.executeInTermux(fullCmd, "")
-                        com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (-p flag)", "exit=${result.exitCode} output=${result.output.take(2000)}")
+                        com.omniclaw.core.logging.FileLogger.i("ChatViewModel", "Agent exec (stdin+pipe)", "exit=${result.exitCode} output=${result.output.take(2000)}")
                     }
 
-                    // If -p flag also failed, try direct argument
+                    // If stdin also failed, try direct argument (no -p)
                     if (result.exitCode != 0 || result.output.isBlank()) {
                         fullCmd = "$envExports $runCmd \"$escaped\""
                         result = termuxRuntime.executeInTermux(fullCmd, "")
@@ -495,8 +498,15 @@ class ChatViewModel(
 
         val exports = StringBuilder()
 
-        // Always set OPENAI_API_KEY — most agents accept this as a generic key
-        exports.append("export OPENAI_API_KEY='$apiKey'")
+        // CRITICAL: CLAUDE_CODE_USE_OPENAI=1 tells OpenClaude to use the
+        // OpenAI-compatible provider instead of the default Gitlawb Opengateway.
+        // Without this, OpenClaude ignores OPENAI_API_KEY and asks for
+        // OPENGATEWAY_API_KEY instead.
+        exports.append("export CLAUDE_CODE_USE_OPENAI=1")
+
+        // Always set OPENAI_API_KEY — OpenClaude reads this when
+        // CLAUDE_CODE_USE_OPENAI=1
+        exports.append(" && export OPENAI_API_KEY='$apiKey'")
 
         // Set provider-specific env vars + base URL
         when {
