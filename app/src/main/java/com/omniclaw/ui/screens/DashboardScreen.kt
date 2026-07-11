@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.omniclaw.core.di.AppContainer
+import com.omniclaw.BuildConfig
 import com.omniclaw.ui.theme.pressScale
 import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.DashboardViewModel
@@ -32,6 +34,10 @@ import rikka.shizuku.Shizuku
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
+import android.widget.Toast
+import androidx.compose.material.icons.filled.SystemUpdate
+import com.omniclaw.data.local.updater.SilentUpdater
 
 private val DATE_SESSION_FORMAT = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
 
@@ -65,6 +71,9 @@ fun DashboardScreen(
 
     val context = LocalContext.current
     var isShizukuActive by remember { mutableStateOf(false) }
+    var isUpdating by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val container = (context.applicationContext as com.omniclaw.OmniClawApplication).container
 
     LaunchedEffect(Unit) {
         val isInstalled = try {
@@ -100,6 +109,37 @@ fun DashboardScreen(
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = CD_SETTINGS)
+                    }
+                    if (isShizukuActive) {
+                        IconButton(
+                            enabled = !isUpdating,
+                            onClick = {
+                                scope.launch {
+                                    isUpdating = true
+                                    try {
+                                        val result = runSilentUpdate(context, container)
+                                        val msg = when (result) {
+                                            is SilentUpdater.UpdateResult.Success ->
+                                                "Updated successfully (silent install)."
+                                            is SilentUpdater.UpdateResult.Failure ->
+                                                "Update failed: ${result.reason}"
+                                        }
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        isUpdating = false
+                                    }
+                                }
+                            }
+                        ) {
+                            if (isUpdating) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.SystemUpdate, contentDescription = "Silent update")
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -398,5 +438,57 @@ private fun SessionCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * Fetch the latest GitHub release APK for THIS app's flavor and silently
+ * install it via Shizuku (no system "install?" prompt).
+ *
+ * The release artifacts are named orbit-ai-<flavor>-debug-<run>.apk (see the
+ * repo's build.yml). We resolve the current flavor from the package suffix and
+ * download the latest matching asset from the GitHub Releases API.
+ */
+private suspend fun runSilentUpdate(
+    context: android.content.Context,
+    container: AppContainer
+): SilentUpdater.UpdateResult {
+    val flavor = when {
+        BuildConfig.APPLICATION_ID.endsWith(".openclaude") -> "openclaude"
+        BuildConfig.APPLICATION_ID.endsWith(".opencode") -> "opencode"
+        BuildConfig.APPLICATION_ID.endsWith(".claudecode") -> "claudecode"
+        BuildConfig.APPLICATION_ID.endsWith(".codex") -> "codex"
+        else -> "normal"
+    }
+    val client = container.okHttpClient
+    return try {
+        val apiReq = okhttp3.Request.Builder()
+            .url("https://api.github.com/repos/TheOneWhoSpeaksJanna/Orbit-AI/releases/latest")
+            .build()
+        val apiResp = client.newCall(apiReq).execute()
+        if (!apiResp.isSuccessful) {
+            return SilentUpdater.UpdateResult.Failure("GitHub API error: ${apiResp.code}")
+        }
+        val bodyStr = apiResp.body?.string().orEmpty()
+        val assetRegex = Regex("\"browser_download_url\"\\s*:\\s*\"(https://[^\"]*orbit-ai-$flavor-debug[^\"]*\\.apk)\"")
+        val apkUrl = assetRegex.find(bodyStr)?.groupValues?.getOrNull(1)
+            ?: return SilentUpdater.UpdateResult.Failure("No APK asset found for flavor '$flavor'.")
+        if (apkUrl.contains(BuildConfig.VERSION_NAME)) {
+            return SilentUpdater.UpdateResult.Failure("Already on the latest version (${BuildConfig.VERSION_NAME}).")
+        }
+
+        val dlReq = okhttp3.Request.Builder().url(apkUrl).build()
+        val dlResp = client.newCall(dlReq).execute()
+        if (!dlResp.isSuccessful) {
+            return SilentUpdater.UpdateResult.Failure("Download failed: ${dlResp.code}")
+        }
+        val apkFile = java.io.File(context.cacheDir, "orbit_update.apk")
+        dlResp.body?.byteStream()?.use { input ->
+            apkFile.outputStream().use { out -> input.copyTo(out) }
+        }
+
+        container.silentUpdater.installApk(apkFile)
+    } catch (e: Exception) {
+        SilentUpdater.UpdateResult.Failure("Update error: ${e.message}")
     }
 }

@@ -70,7 +70,7 @@ android {
     applicationId = "com.aistudio.orbit.xqwtyz"
     minSdk = 24
     targetSdk = 36
-    versionCode = 12
+    versionCode = 13
     versionName = "1.11"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

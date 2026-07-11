@@ -466,7 +466,14 @@ class TermuxRuntime(private val context: Context) {
             env["PROOT_TMP_DIR"] = tmpDir.absolutePath
             // Termux environment — must match what Termux binaries expect
             env["PREFIX"] = termuxPrefix
-            env["PATH"] = "$termuxPrefix/bin:/system/bin:/system/xbin"
+            // IMPORTANT: only the Termux prefix bin is on PATH. The previous
+            // code also prepended /system/bin:/system/xbin, but those binaries
+            // live under the system SELinux label and CANNOT be execve()'d by
+            // this app's domain — every lookup that fell through to them failed
+            // with EACCES ("Permission denied", exit 127), making ordinary
+            // terminal commands unusable. Termux ships its own coreutils
+            // (ls, cat, cp, …) under its prefix, so they cover the toolset.
+            env["PATH"] = "$termuxPrefix/bin"
             env["HOME"] = termuxHome
             env["TMPDIR"] = "$termuxPrefix/tmp"
             env["LANG"] = "en_US.UTF-8"
@@ -512,8 +519,17 @@ class TermuxRuntime(private val context: Context) {
                 FileLogger.d(TAG, "Termux exec success", "exit=0 time=${execDuration}ms output=${output.length}chars")
             }
 
+            // The Termux binaries run under PRoot cannot read the device's
+            // generated linker configuration, emitting a harmless but very
+            // noisy "WARNING: linker: Warning: failed to find generated linker
+            // configuration from /linkerconfig/ld.config.txt" line on every
+            // command. Strip it from the captured output so logs stay readable
+            // (it has no effect on command behaviour — confirmed against the
+            // live device).
             val combinedOutput = if (stderr.isNotBlank()) "$output\n$stderr" else output
-            CommandResult(combinedOutput.trim(), exitCode, command)
+            CommandResult(combinedOutput.lines()
+                .filter { !it.trim().startsWith("WARNING: linker:") }
+                .joinToString("\n").trimEnd(), exitCode, command)
         } catch (e: Exception) {
             FileLogger.e(TAG, "Termux exec exception", e, "cmd=${command.take(100)} reason=${e.message}")
             CommandResult("Error: ${e.message}", -1, command)

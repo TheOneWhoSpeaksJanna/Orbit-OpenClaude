@@ -8,6 +8,8 @@ import com.omniclaw.data.api.tools.ToolRegistry
 import com.omniclaw.data.local.OmniClawDatabase
 import com.omniclaw.data.local.prefs.PreferencesManager
 import com.omniclaw.data.local.runner.LocalCommandRunner
+import com.omniclaw.data.local.runtime.OmniClawRuntimeManager
+import com.omniclaw.data.local.updater.SilentUpdater
 import com.omniclaw.data.repository.OmniClawRepositoryImpl
 import com.omniclaw.data.repository.OpenCodeRepositoryImpl
 import com.omniclaw.domain.api.AiProvider
@@ -24,6 +26,7 @@ interface AppContainer {
     val localCommandRunner: LocalCommandRunner
     val runtimeManager: com.omniclaw.data.local.runtime.OmniClawRuntimeManager
     val termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime
+    val silentUpdater: SilentUpdater
     val toolCallRecorder: ToolCallRecorder
     val openCodeRepository: OpenCodeRepository
     val okHttpClient: OkHttpClient
@@ -67,6 +70,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val termuxRuntime: com.omniclaw.data.local.runtime.TermuxRuntime by lazy {
         com.omniclaw.data.local.runtime.TermuxRuntime(context)
+    }
+
+    override val silentUpdater: SilentUpdater by lazy {
+        SilentUpdater(context, runtimeManager)
     }
 
     override val toolCallRecorder: ToolCallRecorder by lazy {

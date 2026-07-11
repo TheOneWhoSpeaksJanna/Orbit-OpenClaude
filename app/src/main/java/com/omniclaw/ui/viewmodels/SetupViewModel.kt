@@ -490,11 +490,19 @@ class SetupViewModel(
                     updateInstallState(agentName, progress = 0.6f, status = STATUS_INSTALLING_DEPS)
 
                     // Try installing from pre-bundled tarball (offline, no network needed)
-                    val tarballCopied = copyAssetToRootfs(termuxRuntime, "openclaude.tgz", "/tmp/openclaude.tgz")
+                    //
+                    // NOTE: the tarball is copied into runtimeDir/tmp/ which is
+                    // bind-mounted INSIDE PRoot at /orbit/tmp (see the
+                    // "-b $runtimeDir:/orbit" flag in executeInTermux). It must
+                    // NOT be referenced as /tmp/openclaude.tgz — executeInTermux
+                    // also binds /data/local/tmp to /tmp, which would shadow the
+                    // copied file and make npm fail with ENOENT ("tarball data
+                    // for file:/tmp/openclaude.tgz seems to be corrupted").
+                    val tarballCopied = copyAssetToRootfs(termuxRuntime, "openclaude.tgz", "/orbit/tmp/openclaude.tgz")
                     if (tarballCopied) {
-                        emitLog("SetupViewModel", "Installing agent from bundled tarball", "tarball=/tmp/openclaude.tgz")
+                        emitLog("SetupViewModel", "Installing agent from bundled tarball", "tarball=/orbit/tmp/openclaude.tgz")
                         val installResult = termuxRuntime.executeInTermux(
-                            "npm install -g /tmp/openclaude.tgz 2>&1",
+                            "npm install -g /orbit/tmp/openclaude.tgz 2>&1",
                             ""
                         )
                         emitLog("SetupViewModel", "npm install (tarball) result", "exit=${installResult.exitCode} output=${installResult.output.take(500)}")
