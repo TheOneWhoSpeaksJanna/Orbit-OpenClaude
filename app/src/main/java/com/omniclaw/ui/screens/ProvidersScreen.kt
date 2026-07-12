@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
@@ -124,6 +125,7 @@ fun ProvidersScreen(
     val providers by viewModel.providers.collectAsState()
     val editingProvider by viewModel.editingProvider.collectAsState()
     val editApiKeyValue by viewModel.editApiKeyValue.collectAsState()
+    val selectedProvider by viewModel.selectedProvider.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
@@ -153,6 +155,32 @@ fun ProvidersScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
+            // Active provider banner — shows which provider chat uses right now.
+            if (selectedProvider.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Active provider: $selectedProvider  ·  tap a card to switch",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -172,8 +200,10 @@ fun ProvidersScreen(
         itemsIndexed(filteredProviders, key = { _, item -> item.name }) { index, provider ->
             ProviderHealthCard(
                 provider = provider,
+                isSelected = provider.name.equals(selectedProvider, ignoreCase = true),
                 onVerify = { viewModel.verifyConnection(provider.name) },
                 onEditKey = { viewModel.startEditApiKey(provider.name) },
+                onSetActive = { viewModel.setActiveProvider(provider.name) },
                 modifier = Modifier.staggeredEntrance(index, itemId = provider.name)
             )
         }
@@ -292,8 +322,10 @@ fun ProvidersScreen(
 @Composable
 private fun ProviderHealthCard(
     provider: ProviderConfig,
+    isSelected: Boolean = false,
     onVerify: () -> Unit,
     onEditKey: () -> Unit,
+    onSetActive: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     
@@ -310,7 +342,7 @@ private fun ProviderHealthCard(
     val isVerifying = provider.connectionState is ConnectionState.Verifying
 
     AnimatedGlassCard(
-        onClick = null,
+        onClick = if (isSelected) null else onSetActive,
         modifier = modifier.fillMaxWidth(),
         radius = 14
     ) {
@@ -336,12 +368,23 @@ private fun ProviderHealthCard(
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = provider.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = provider.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (isSelected) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Active provider",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(

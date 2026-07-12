@@ -40,7 +40,6 @@ data class ProviderConfig(
     val requiresKey: Boolean = true,
     val connectionState: ConnectionState = ConnectionState.Idle
 )
-
 sealed class ConnectionState {
     data object Idle : ConnectionState()
     data object Verifying : ConnectionState()
@@ -58,6 +57,10 @@ class ProvidersViewModel(
 
     private val _providers = MutableStateFlow<List<ProviderConfig>>(emptyList())
     val providers: StateFlow<List<ProviderConfig>> = _providers.asStateFlow()
+
+    // The provider currently active for chat (display name), read from DataStore.
+    private val _selectedProvider = MutableStateFlow("")
+    val selectedProvider: StateFlow<String> = _selectedProvider.asStateFlow()
 
     private val _editingProvider = MutableStateFlow<String?>(null)
     val editingProvider: StateFlow<String?> = _editingProvider.asStateFlow()
@@ -83,6 +86,10 @@ class ProvidersViewModel(
      */
     private fun loadProviders() {
         viewModelScope.launch(exceptionHandler) {
+            // Read the active provider BEFORE publishing the list, so it is stable
+            // by the time the list items compose/animate (avoids a second emission
+            // mid-animation that could interrupt item entrance animations).
+            _selectedProvider.value = prefsManager.selectedProvider.firstOrNull().orEmpty()
             val catalog = com.omniclaw.data.local.runtime.ProviderCatalog.load(context)
             val configs = catalog.map { entry ->
                 val key = prefsManager.getApiKeyForProvider(entry.id).firstOrNull()
@@ -94,6 +101,19 @@ class ProvidersViewModel(
             }
             _providers.value = configs
             FileLogger.i("ProvidersViewModel", "Loaded ${configs.size} providers from catalog")
+        }
+    }
+
+    /**
+     * Set [providerName] as the active provider for chat and persist to DataStore.
+     * Lets the user switch providers (e.g. Gemini -> OpenRouter) without re-running
+     * the setup wizard.
+     */
+    fun setActiveProvider(providerName: String) {
+        viewModelScope.launch(exceptionHandler) {
+            prefsManager.setSelectedProvider(providerName)
+            _selectedProvider.value = providerName
+            FileLogger.i("ProvidersViewModel", "Active provider set to $providerName")
         }
     }
 

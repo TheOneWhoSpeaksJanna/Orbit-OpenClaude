@@ -1,8 +1,10 @@
 package com.omniclaw.data.local.prefs
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -16,7 +18,14 @@ data class DownloadProgress(
     val version: String
 )
 
-val Context.dataStore by preferencesDataStore("orbit_prefs")
+// A corruption handler makes the app self-heal if the prefs file ever becomes
+// unreadable (e.g. interrupted write, disk issue): instead of crash-looping with
+// CorruptionException, DataStore resets to empty prefs (onboarding re-runs) and
+// the app stays usable.
+val Context.dataStore by preferencesDataStore(
+    name = "orbit_prefs",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
 
 class PreferencesManager(private val context: Context) {
 
