@@ -108,12 +108,27 @@ class ProvidersViewModel(
      * Set [providerName] as the active provider for chat and persist to DataStore.
      * Lets the user switch providers (e.g. Gemini -> OpenRouter) without re-running
      * the setup wizard.
+     *
+     * Also resets the selected model to the new provider's catalog default, because
+     * a model name valid for the old provider (e.g. a Gemini model) is usually
+     * rejected by a different provider (e.g. OpenRouter). Without this reset the
+     * first chat after a switch would fail with an upstream "unknown model" error.
      */
     fun setActiveProvider(providerName: String) {
         viewModelScope.launch(exceptionHandler) {
             prefsManager.setSelectedProvider(providerName)
             _selectedProvider.value = providerName
-            FileLogger.i("ProvidersViewModel", "Active provider set to $providerName")
+            // Reset model to the new provider's default so chat doesn't send a
+            // stale, incompatible model name to the newly-selected provider.
+            val catalog = com.omniclaw.data.local.runtime.ProviderCatalog.load(context)
+            val entry = catalog.find { it.name == providerName }
+            val defaultModel = entry?.defaultModel?.takeIf { it.isNotBlank() }
+            if (defaultModel != null) {
+                prefsManager.setSelectedModel(defaultModel)
+                FileLogger.i("ProvidersViewModel", "Active provider set", "provider=$providerName model=$defaultModel")
+            } else {
+                FileLogger.i("ProvidersViewModel", "Active provider set", "provider=$providerName model=unchanged")
+            }
         }
     }
 
