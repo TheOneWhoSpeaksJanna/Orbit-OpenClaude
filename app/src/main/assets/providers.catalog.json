@@ -1,37 +1,16 @@
 {
-  "_comment": "Dynamic provider catalog mirroring OpenClaude's integration registry. This file is bundled in the APK and loaded at runtime to populate the Providers screen. When new agents are installed, their own provider configs can augment this list.",
+  "_comment": "Provider catalog for Orbit-OpenClaude \u2014 restricted to the OpenRouter provider only (isolated per-flavor repo).",
   "providers": [
-    {"id": "anthropic", "name": "Anthropic Claude", "type": "vendor", "transport": "anthropic-native", "baseUrl": "https://api.anthropic.com", "authMode": "api-key", "defaultModel": "claude-sonnet-4-20250514", "icon": "claude", "requiresKey": true},
-    {"id": "openai", "name": "OpenAI", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.openai.com/v1", "authMode": "api-key", "defaultModel": "gpt-4o", "icon": "openai", "requiresKey": true},
-    {"id": "gemini", "name": "Google Gemini", "type": "vendor", "transport": "gemini-native", "baseUrl": "https://generativelanguage.googleapis.com", "authMode": "api-key", "defaultModel": "gemini-2.0-flash-exp", "icon": "gemini", "requiresKey": true},
-    {"id": "deepseek", "name": "DeepSeek", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.deepseek.com/v1", "authMode": "api-key", "defaultModel": "deepseek-chat", "icon": "deepseek", "requiresKey": true},
-    {"id": "xai", "name": "xAI (Grok)", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.x.ai/v1", "authMode": "api-key", "defaultModel": "grok-3", "icon": "xai", "requiresKey": true},
-    {"id": "venice", "name": "Venice AI", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.venice.ai/api/v1", "authMode": "api-key", "defaultModel": "llama-3.3-70b", "icon": "venice", "requiresKey": true},
-    {"id": "fireworks", "name": "Fireworks AI", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.fireworks.ai/inference/v1", "authMode": "api-key", "defaultModel": "accounts/fireworks/models/llama-v3p3-70b-instruct", "icon": "fireworks", "requiresKey": true},
-    {"id": "moonshot", "name": "Moonshot (Kimi)", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.moonshot.cn/v1", "authMode": "api-key", "defaultModel": "moonshot-v1-128k", "icon": "moonshot", "requiresKey": true},
-    {"id": "minimax", "name": "MiniMax", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.minimax.chat/v1", "authMode": "api-key", "defaultModel": "MiniMax-Text-01", "icon": "minimax", "requiresKey": true},
-    {"id": "nearai", "name": "Near AI", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.near.ai/v1", "authMode": "api-key", "defaultModel": "", "icon": "nearai", "requiresKey": true},
-    {"id": "zai", "name": "Z.AI", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.z.ai/api/paas/v4", "authMode": "api-key", "defaultModel": "", "icon": "zai", "requiresKey": true},
-    {"id": "xiaomi-mimo", "name": "Xiaomi MiMo", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.xiaomimimo.com/v1", "authMode": "api-key", "defaultModel": "", "icon": "xiaomi", "requiresKey": true},
-
-    {"id": "openrouter", "name": "OpenRouter", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://openrouter.ai/api/v1", "authMode": "api-key", "defaultModel": "tencent/hy3:free", "icon": "openrouter", "requiresKey": true},
-    {"id": "groq", "name": "Groq", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.groq.com/openai/v1", "authMode": "api-key", "defaultModel": "llama-3.3-70b-versatile", "icon": "groq", "requiresKey": true},
-    {"id": "together", "name": "Together AI", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.together.xyz/v1", "authMode": "api-key", "defaultModel": "meta-llama/Llama-3.3-70B-Instruct-Turbo", "icon": "together", "requiresKey": true},
-    {"id": "mistral", "name": "Mistral AI", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.mistral.ai/v1", "authMode": "api-key", "defaultModel": "mistral-large-latest", "icon": "mistral", "requiresKey": true},
-    {"id": "github", "name": "GitHub Copilot", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.githubcopilot.com", "authMode": "oauth", "defaultModel": "gpt-4o", "icon": "github", "requiresKey": false},
-    {"id": "ollama", "name": "Ollama (Local)", "type": "gateway", "transport": "local", "baseUrl": "http://localhost:11434", "authMode": "none", "defaultModel": "llama3.1", "icon": "ollama", "requiresKey": false},
-    {"id": "lmstudio", "name": "LM Studio (Local)", "type": "gateway", "transport": "local", "baseUrl": "http://localhost:1234/v1", "authMode": "none", "defaultModel": "", "icon": "lmstudio", "requiresKey": false},
-    {"id": "bedrock", "name": "AWS Bedrock", "type": "gateway", "transport": "bedrock", "baseUrl": "", "authMode": "api-key", "defaultModel": "anthropic.claude-3-5-sonnet-20241022-v2:0", "icon": "aws", "requiresKey": true},
-    {"id": "vertex", "name": "Google Vertex AI", "type": "gateway", "transport": "vertex", "baseUrl": "", "authMode": "adc", "defaultModel": "claude-3-5-sonnet@20241022", "icon": "vertex", "requiresKey": false},
-    {"id": "azure-openai", "name": "Azure OpenAI", "type": "gateway", "transport": "openai-compatible", "baseUrl": "", "authMode": "api-key", "defaultModel": "", "icon": "azure", "requiresKey": true},
-    {"id": "nvidia-nim", "name": "NVIDIA NIM", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://integrate.api.nvidia.com/v1", "authMode": "api-key", "defaultModel": "", "icon": "nvidia", "requiresKey": true},
-    {"id": "dashscope-cn", "name": "DashScope (CN)", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1", "authMode": "api-key", "defaultModel": "qwen-max", "icon": "dashscope", "requiresKey": true},
-    {"id": "dashscope-intl", "name": "DashScope (Intl)", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "authMode": "api-key", "defaultModel": "qwen-max", "icon": "dashscope", "requiresKey": true},
-    {"id": "atlas-cloud", "name": "Atlas Cloud", "type": "gateway", "transport": "openai-compatible", "baseUrl": "", "authMode": "api-key", "defaultModel": "", "icon": "atlas", "requiresKey": true},
-    {"id": "kimi-code", "name": "Kimi Code", "type": "gateway", "transport": "openai-compatible", "baseUrl": "", "authMode": "api-key", "defaultModel": "", "icon": "kimi", "requiresKey": true},
-    {"id": "opencode", "name": "OpenCode Gateway", "type": "gateway", "transport": "openai-compatible", "baseUrl": "", "authMode": "api-key", "defaultModel": "", "icon": "opencode", "requiresKey": true},
-    {"id": "gitlawb-opengateway", "name": "Gitlawb OpenGateway", "type": "gateway", "transport": "openai-compatible", "baseUrl": "", "authMode": "api-key", "defaultModel": "", "icon": "opengateway", "requiresKey": true},
-    {"id": "zai-free", "name": "Z.AI (Free GLM)", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://internal-api.z.ai/v1", "authMode": "token", "defaultModel": "glm-5.2", "icon": "zai", "requiresKey": true, "free": true, "models": ["glm-5.2", "glm-4.6", "glm-4-plus", "glm-4-flash", "glm-4-air"], "_note": "Free provider — uses the same API as chat.z.ai. API key is 'Z.ai' (public). User pastes their session token from the Z.AI web interface. Auto-retries on rate limits."},
-    {"id": "custom", "name": "Custom OpenAI-compatible", "type": "gateway", "transport": "openai-compatible", "baseUrl": "", "authMode": "api-key", "defaultModel": "", "icon": "custom", "requiresKey": true}
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "type": "gateway",
+      "transport": "openai-compatible",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "authMode": "api-key",
+      "defaultModel": "tencent/hy3:free",
+      "icon": "openrouter",
+      "requiresKey": true
+    }
   ]
 }

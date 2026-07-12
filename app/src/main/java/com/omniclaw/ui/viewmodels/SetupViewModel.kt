@@ -32,7 +32,7 @@ import java.io.File
 
 private const val DEFAULT_THEME = "System"
 private const val DEFAULT_AGENT = "OpenClaude"
-private const val DEFAULT_PROVIDER = "Gemini"
+private const val DEFAULT_PROVIDER = "OpenRouter"
 private const val AGENT_HERMES = "Hermes"
 private const val AGENT_OPENCLAUDE = "OpenClaude"
 private const val AGENT_CLAUDE_CODE = "Claude Code"

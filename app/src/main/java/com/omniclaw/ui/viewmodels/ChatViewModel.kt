@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-private const val DEFAULT_PROVIDER = "Gemini"
+private const val DEFAULT_PROVIDER = "OpenRouter"
 private const val NEW_SESSION_TITLE = "New Session"
 private const val DEFAULT_SYSTEM_PROMPT = "System: You are an expert AI assistant."
 private const val NO_OUTPUT = "(no output)"
