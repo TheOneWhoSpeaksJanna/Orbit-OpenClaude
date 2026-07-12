@@ -612,10 +612,23 @@ class ChatViewModel(
             }
         }
 
-        // Set the model if specified
+        // Set the model if specified. OpenClaude (CLAUDE_CODE_USE_OPENAI=1) reads
+        // ANTHROPIC_MODEL for the main model and ANTHROPIC_SMALL_FAST_MODEL for the
+        // fast/cheap sub-calls. If we only set OPENAI_MODEL the agent falls back to
+        // its built-in default (often a paid model), which makes free-tier keys
+        // fail with "API quota exhausted or not enabled". Export all three so the
+        // app's selected model (or the provider default) is honored everywhere.
         if (model.isNotBlank() && model != "auto") {
             exports.append(" && export OPENAI_MODEL='$model'")
+            exports.append(" && export ANTHROPIC_MODEL='$model'")
+            exports.append(" && export ANTHROPIC_SMALL_FAST_MODEL='$model'")
         }
+
+        // Ensure the agent's Bash tool can find a POSIX shell inside PRoot. The
+        // termux rootfs has usr/bin/{sh,bash} but no /bin/sh and no /etc/passwd
+        // entry, so without SHELL set OpenClaude reports "No suitable shell found"
+        // and every shell command fails. Point it at the guest-relative bash.
+        exports.append(" && export SHELL='/data/data/com.termux/files/usr/bin/bash'")
 
         exports.append(" && ")
         return exports.toString()

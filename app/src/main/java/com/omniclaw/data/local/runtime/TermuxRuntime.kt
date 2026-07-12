@@ -211,6 +211,21 @@ class TermuxRuntime(private val context: Context) {
             File(rootfsDir, "data/data/com.termux/files/home").mkdirs()
             File(prefixDir, "tmp").mkdirs()
 
+            // CRITICAL: OpenClaude's Bash tool (and other CLI agents) probe for a
+            // POSIX shell at /bin/sh. The termux rootfs only ships usr/bin/{sh,bash}
+            // and has no /bin/sh symlink, which makes shell commands fail with
+            // "No suitable shell found". Create /bin/sh -> usr/bin/sh so the agent
+            // can run terminal commands. Guest-relative target (resolves inside PRoot).
+            val binShSymlink = File(rootfsDir, "bin/sh")
+            binShSymlink.parentFile?.mkdirs()
+            if (!binShSymlink.exists()) {
+                try {
+                    Runtime.getRuntime().exec(
+                        arrayOf("ln", "-sf", "$termuxPrefix/bin/sh", binShSymlink.absolutePath)
+                    ).waitFor()
+                } catch (_: Exception) { /* best-effort */ }
+            }
+
             // CRITICAL: apt's compiled-in cache path is
             // /data/data/com.termux/cache/apt/archives/partial
             // (NOT under files/usr/ — it's one level up, at files/../cache).
@@ -482,6 +497,11 @@ class TermuxRuntime(private val context: Context) {
             env["LANG"] = "en_US.UTF-8"
             env["TERM"] = "xterm-256color"
             env["LD_LIBRARY_PATH"] = "$termuxPrefix/lib:/system/lib64"
+            // OpenClaude's Bash tool needs SHELL to point at a POSIX shell inside
+            // the rootfs. The termux rootfs ships usr/bin/{sh,bash} but has no
+            // /bin/sh and no /etc/passwd entry, so without this the agent reports
+            // "No suitable shell found" and every shell command fails.
+            env["SHELL"] = "$termuxPrefix/bin/bash"
 
             val process = pb.start()
 
