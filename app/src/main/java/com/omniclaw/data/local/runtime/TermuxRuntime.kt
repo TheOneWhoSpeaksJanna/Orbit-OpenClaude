@@ -56,6 +56,9 @@ private const val TAG = "TermuxRuntime"
  */
 class TermuxRuntime(private val context: Context) {
 
+    /** App context, exposed so callers can load bundled assets (e.g. the provider catalog). */
+    val appContext: Context get() = context
+
     val runtimeDir = File(context.filesDir, "orbit_runtime")
 
     /** PRoot root (the chroot root). Contains data/data/com.termux/files/usr/ */

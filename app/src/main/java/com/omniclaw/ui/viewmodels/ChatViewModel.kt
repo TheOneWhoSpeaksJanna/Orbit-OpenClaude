@@ -532,10 +532,12 @@ class ChatViewModel(
         exports.append(" && export OPENAI_API_KEY='$apiKey'")
 
         // Set provider-specific env vars + base URL
+        var baseUrlSet = false
         when {
             provider.contains("OpenRouter", ignoreCase = true) -> {
                 exports.append(" && export OPENROUTER_API_KEY='$apiKey'")
                 exports.append(" && export OPENAI_BASE_URL='https://openrouter.ai/api/v1'")
+                baseUrlSet = true
             }
             provider.contains("Anthropic", ignoreCase = true) || provider.contains("Claude", ignoreCase = true) -> {
                 exports.append(" && export ANTHROPIC_API_KEY='$apiKey'")
@@ -547,15 +549,41 @@ class ChatViewModel(
                 exports.append(" && export OPENAI_BASE_URL='https://generativelanguage.googleapis.com/v1beta/openai/'")
                 exports.append(" && export GOOGLE_API_KEY='$apiKey'")
                 exports.append(" && export GEMINI_API_KEY='$apiKey'")
+                baseUrlSet = true
             }
             provider.contains("DeepSeek", ignoreCase = true) -> {
                 exports.append(" && export OPENAI_BASE_URL='https://api.deepseek.com/v1'")
+                baseUrlSet = true
             }
             provider.contains("Groq", ignoreCase = true) -> {
                 exports.append(" && export OPENAI_BASE_URL='https://api.groq.com/openai/v1'")
+                baseUrlSet = true
             }
             provider.contains("xAI", ignoreCase = true) || provider.contains("Grok", ignoreCase = true) -> {
                 exports.append(" && export OPENAI_BASE_URL='https://api.x.ai/v1'")
+                baseUrlSet = true
+            }
+        }
+
+        // Fallback: for any other catalog provider (Venice, Fireworks, Mistral,
+        // NVIDIA, Together, MiniMax, etc.) look up its baseUrl from the provider
+        // catalog. Without this the agent would default to api.openai.com and
+        // send the wrong provider's key there, failing every chat.
+        if (!baseUrlSet) {
+            try {
+                val catalog = com.omniclaw.data.local.runtime.ProviderCatalog.load(termuxRuntime.appContext)
+                val entry = catalog.find { it.name.equals(provider, ignoreCase = true) }
+                val base = entry?.baseUrl?.trim()?.takeIf { it.isNotBlank() }
+                if (base != null) {
+                    val normalized = if (base.trimEnd('/').endsWith("/v1")) base.trimEnd('/') else base.trimEnd('/') + "/v1"
+                    exports.append(" && export OPENAI_BASE_URL='$normalized'")
+                    baseUrlSet = true
+                }
+            } catch (e: Exception) {
+                com.omniclaw.core.logging.FileLogger.w(
+                    "ChatViewModel", "baseUrl catalog lookup failed",
+                    "provider=$provider reason=${e.message}"
+                )
             }
         }
 
